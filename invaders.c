@@ -4,17 +4,26 @@
 #include "pool.h"
 #include "stb_sprintf.h"
 
+typedef struct Entity Entity;
+typedef struct Missile Missile;
+typedef struct Missile_emitter Missile_emitter;
+typedef struct Enemy Enemy;
+typedef struct Enemy_formation Enemy_formation;
+typedef struct Ship Ship;
+
+#define MAX_MISSILES (int)256
+#define ENEMY_WAVE_SIZE (int)14
+#define MAX_SIMULTANEOUS_FIRING_ENEMIES (int)4
+#define MAX_ENEMIES (int)32
+
 const float ASPECT = 1.0; //TODO adjustable aspect ratio
 const int SCREEN_WIDTH = 1100;
 const int SCREEN_HEIGHT = 900;
 const int SHIP_Y_COORD = SCREEN_HEIGHT - 200;
 const float SHIP_ACCEL = 4e4;
-const int MAX_MISSILES = 256;
-const int ENEMY_WAVE_SIZE = 14;
 
 const int STRAFE_X_MAX_OFFSET = 80;
 const float ENEMY_STRAFE_SPEED = 100;
-const int MAX_SIMULTANEOUS_FIRING_ENEMIES = 4;
 
 Texture2D enemy_sprite;
 Texture2D background;
@@ -27,18 +36,20 @@ struct Entity {
     float     half_height;
 };
 
-struct Missile : Entity {
-    Rectangle rec = { .width = 5, .height = 14, };
-    Color     color = { 255, 50, 0, 255 };
+struct Missile {
+    Entity    entity;
+    Rectangle rec;
+    Color     color;
 };
 
 struct Missile_emitter {
     Missile buf[MAX_MISSILES];
     bool live[MAX_MISSILES];
-    int pos = 0;
+    int n;
 };
 
-struct Enemy : Entity {
+struct Enemy {
+    Entity          entity;
     Texture2D       sprite;
     Missile_emitter missile_launcher;
     float           fire_rate;
@@ -54,13 +65,14 @@ struct Enemy_formation {
     Vector2 strafe_vel;
 };
 
-struct Ship : Entity {
+struct Ship {
+    Entity          entity;
     Texture2D       sprite;
     Missile_emitter missile_launcher;
 };
 
-const int MAX_ENEMIES = 32;
-Enemy enemy_buf[MAX_ENEMIES];
+
+Enemy enemy_buf[MAX_ENEMIES] = {0};
 bool live_enemies[MAX_ENEMIES];
 int enemy_buf_pos = 0;
 
@@ -77,12 +89,10 @@ INLINE int make_enemy(Vector2 pos) {
     }
 
     Enemy *e = enemy_buf + i;
-    Enemy init;
-    init.pos.x = pos.x;
-    init.pos.y = pos.y;
-    init.half_width = enemy_sprite.width*0.5;
-    init.half_height = enemy_sprite.height*0.5;
-    *e = init;
+    e->entity.pos.x = pos.x;
+    e->entity.pos.y = pos.y;
+    e->entity.half_width = enemy_sprite.width*0.5;
+    e->entity.half_height = enemy_sprite.height*0.5;
 
     e->sprite = enemy_sprite;
 
@@ -99,7 +109,7 @@ INLINE void destroy_Enemy(int i) {
 INLINE int make_missile(Missile_emitter *emitter, Vector2 pos, Vector2 vel) {
     int i = 0;
     int increment = 1;
-    for(; i < emitter->pos; ++i) {
+    for(; i < emitter->n; ++i) {
         if(emitter->live[i] == false) {
             increment = 0;
             break;
@@ -107,16 +117,16 @@ INLINE int make_missile(Missile_emitter *emitter, Vector2 pos, Vector2 vel) {
     }
 
     Missile *m = emitter->buf + i;
-    Missile init;
-    init.pos.x = pos.x;
-    init.pos.y = pos.y;
-    init.half_width = init.rec.width*0.5;
-    init.half_height = init.rec.height*0.5;
-    *m = init;
-    m->vel = vel;
+    m->rec = (Rectangle){ .width = 5, .height = 14 };
+    m->color = (Color){ 255, 80, 0, 255 };
+    m->entity.pos.x = pos.x;
+    m->entity.pos.y = pos.y;
+    m->entity.half_width = m->rec.width*0.5;
+    m->entity.half_height = m->rec.height*0.5;
+    m->entity.vel = vel;
 
     emitter->live[i] = true;
-    emitter->pos += increment;
+    emitter->n += increment;
 
     return i;
 }
@@ -146,7 +156,7 @@ int main(void) {
     Camera2D camera = { .zoom = ASPECT };
 
     {
-        Entity *e = &ship;
+        Entity *e = &ship.entity;
         e->pos.x = HALF(SCREEN_WIDTH);
         e->pos.y = SHIP_Y_COORD;
         e->half_width = 28;
@@ -166,7 +176,7 @@ int main(void) {
         float current_x = formation_x_offset;
         float current_y = 150;
         for(int i = 0; i < ENEMY_WAVE_SIZE;) {
-            int enemy_index = make_enemy({ current_x + half_width_section, current_y });
+            int enemy_index = make_enemy((Vector2){ current_x + half_width_section, current_y });
             current_x += width_section;
 
             enemy_formation.enemy_indexes[enemy_formation.enemy_count++] = enemy_index;
@@ -184,7 +194,7 @@ int main(void) {
         float even_fire_rate = 0.8;
         float odd_fire_rate = 0.3;
         for(int i = 0; i < MAX_SIMULTANEOUS_FIRING_ENEMIES; ++i) {
-            int enemy_index = GetRandomValue(0, enemy_buf_pos);
+            int enemy_index = GetRandomValue(0, enemy_buf_pos - 1);
             if(enemy_index & 0x1) {
                 enemy_buf[enemy_index].total_firing_time = odd_firing_time;
                 enemy_buf[enemy_index].fire_rate = odd_fire_rate;
@@ -192,12 +202,17 @@ int main(void) {
                 enemy_buf[enemy_index].total_firing_time = even_firing_time;
                 enemy_buf[enemy_index].fire_rate = even_fire_rate;
             }
+            enemy_buf[enemy_index].time_since_last_shot = 0.0;
             enemy_formation.firing_enemy_indexes[enemy_formation.firing_enemy_count++] = enemy_index;
         }
     }
 
     char buf[128];
     bool game_over = false;
+
+    for(int i = 0; i < STATICARRLEN(enemy_buf); ++i) {
+        __builtin_dump_struct(enemy_buf + i, printf);
+    }
 
     while(!WindowShouldClose() && !game_over) {
         float timestep = GetFrameTime();
@@ -207,7 +222,7 @@ int main(void) {
             if(background_frame.y <= -SCREEN_HEIGHT)
                 background_frame.y = background.height - SCREEN_HEIGHT;
 
-            Entity *e = &ship;
+            Entity *e = &ship.entity;
 
             e->accel.x = 0;
 
@@ -226,13 +241,13 @@ int main(void) {
             if(IsKeyPressed(KEY_J)) {
                 make_missile(
                         &ship.missile_launcher,
-                        { .x = ship.pos.x, .y = ship.pos.y - ship.half_height - 2.0},
+                        (Vector2){ .x = e->pos.x, .y = e->pos.y - e->half_height - 2.0},
                         (Vector2){ 0, -1000 }
                         );
             }
 
             int n_consecutive_dead_missiles = 0;
-            for(int i = 0; i < ship.missile_launcher.pos; ++i) {
+            for(int i = 0; i < ship.missile_launcher.n; ++i) {
                 if(ship.missile_launcher.live[i] == false) {
                     n_consecutive_dead_missiles += 1;
                     continue;
@@ -241,7 +256,7 @@ int main(void) {
                 n_consecutive_dead_missiles = 0;
 
                 Missile *m = ship.missile_launcher.buf + i;
-                m->pos.y += m->vel.y*timestep;
+                m->entity.pos.y += m->entity.vel.y*timestep;
 
                 bool hit = false;
                 for(int j = 0; j < enemy_buf_pos; ++j) {
@@ -253,14 +268,14 @@ int main(void) {
 
                     Rectangle enemy_hitbox =
                     {
-                        .x = e->pos.x - e->half_width, .y = e->pos.y - e->half_height,
-                        .width = TIMES2(e->half_width),
-                        .height = TIMES2(e->half_height),
+                        .x = e->entity.pos.x - e->entity.half_width, .y = e->entity.pos.y - e->entity.half_height,
+                        .width = TIMES2(e->entity.half_width),
+                        .height = TIMES2(e->entity.half_height),
                     };
 
                     Rectangle missile_hitbox =
                     {
-                        .x = m->pos.x - m->half_width, .y = m->pos.y - m->half_height,
+                        .x = m->entity.pos.x - m->entity.half_width, .y = m->entity.pos.y - m->entity.half_height,
                         .width = m->rec.width, .height = m->rec.height,
                     };
 
@@ -270,12 +285,12 @@ int main(void) {
                     }
                 }
 
-                if(!hit && m->pos.y < -m->rec.height) {
+                if(!hit && m->entity.pos.y < -m->rec.height) {
                     destroy_missile(&ship.missile_launcher, i);
                 }
             }
 
-            ship.missile_launcher.pos -= n_consecutive_dead_missiles;
+            ship.missile_launcher.n -= n_consecutive_dead_missiles;
 
             /* enemy formation update */ {
 
@@ -290,7 +305,7 @@ int main(void) {
 
                     int enemy_index = GetRandomValue(0, enemy_buf_pos);
                     while(live_enemies[enemy_index] == false)
-                        enemy_index = GetRandomValue(0, enemy_formation.enemy_count);
+                        enemy_index = GetRandomValue(0, enemy_buf_pos);
 
                     if(enemy_index & 0x1) {
                         enemy_buf[enemy_index].total_firing_time = odd_firing_time;
@@ -313,12 +328,11 @@ int main(void) {
                     }
 
                     Enemy *e = enemy_buf + enemy_index;
-                    e->vel = enemy_formation.strafe_vel;
+                    e->entity.vel = enemy_formation.strafe_vel;
 
-                    if(enemy_formation.strafe_vel.x < 0.0 && e->pos.x <= STRAFE_X_MAX_OFFSET) {
+                    if(enemy_formation.strafe_vel.x < 0.0 && e->entity.pos.x <= STRAFE_X_MAX_OFFSET) {
                         swap_strafe_direction = true;
-                        printf("here\n");
-                    } else if(enemy_formation.strafe_vel.x > 0 && e->pos.x > SCREEN_WIDTH - STRAFE_X_MAX_OFFSET) {
+                    } else if(enemy_formation.strafe_vel.x > 0 && e->entity.pos.x > SCREEN_WIDTH - STRAFE_X_MAX_OFFSET) {
                         swap_strafe_direction = true;
                     }
                 }
@@ -331,13 +345,13 @@ int main(void) {
                 for(int i = 0; i < enemy_buf_pos; ++i) {
                     if(live_enemies[i] == false) continue;
                     Enemy *e = enemy_buf + i;
-                    e->pos += e->vel * timestep;
+                    e->entity.pos = Vector2Add(e->entity.pos, Vector2Scale(e->entity.vel, timestep));
 
                     if(e->total_firing_time > 0.0) {
                         if(e->time_since_last_shot >= e->fire_rate) {
                             make_missile(
                                     &e->missile_launcher,
-                                    { .x = e->pos.x, .y = e->pos.y + e->half_height + 2.0},
+                                    (Vector2){ .x = e->entity.pos.x, .y = e->entity.pos.y + e->entity.half_height + 2.0},
                                     (Vector2){ 0, 900 }
                                     );
                             e->time_since_last_shot = 0;
@@ -351,7 +365,7 @@ int main(void) {
                     }
 
                     int n_consecutive_dead_missiles = 0;
-                    for(int i = 0; i < e->missile_launcher.pos; ++i) {
+                    for(int i = 0; i < e->missile_launcher.n; ++i) {
                         if(e->missile_launcher.live[i] == false) {
                             n_consecutive_dead_missiles += 1;
                             continue;
@@ -360,7 +374,7 @@ int main(void) {
                         n_consecutive_dead_missiles = 0;
 
                         Missile *m = e->missile_launcher.buf + i;
-                        m->pos.y += m->vel.y*timestep;
+                        m->entity.pos.y += m->entity.vel.y*timestep;
 
                         bool hit = false;
                         for(int j = 0; j < enemy_buf_pos; ++j) {
@@ -372,14 +386,14 @@ int main(void) {
 
                             Rectangle ship_hitbox =
                             {
-                                .x = ship.pos.x - ship.half_width, .y = ship.pos.y - ship.half_height,
-                                .width = TIMES2(ship.half_width),
-                                .height = TIMES2(ship.half_height),
+                                .x = ship.entity.pos.x - ship.entity.half_width, .y = ship.entity.pos.y - ship.entity.half_height,
+                                .width = TIMES2(ship.entity.half_width),
+                                .height = TIMES2(ship.entity.half_height),
                             };
 
                             Rectangle missile_hitbox =
                             {
-                                .x = m->pos.x - m->half_width, .y = m->pos.y - m->half_height,
+                                .x = m->entity.pos.x - m->entity.half_width, .y = m->entity.pos.y - m->entity.half_height,
                                 .width = m->rec.width, .height = m->rec.height,
                             };
 
@@ -390,12 +404,12 @@ int main(void) {
                             }
                         }
 
-                        if(!hit && m->pos.y < -m->rec.height) {
+                        if(!hit && m->entity.pos.y < -m->rec.height) {
                             destroy_missile(&e->missile_launcher, i);
                         }
                     }
 
-                    e->missile_launcher.pos -= n_consecutive_dead_missiles;
+                    e->missile_launcher.n -= n_consecutive_dead_missiles;
                 }
 
             }
@@ -411,9 +425,9 @@ int main(void) {
 
             DrawTextureRec(background, background_frame, (Vector2){0}, (Color){255,255,255,140});
 
-            Entity *e = &ship;
+            Entity *e = &ship.entity;
             DrawTextureV(ship.sprite,
-                    { .x = e->pos.x - ship.sprite.width*0.5, .y = e->pos.y - ship.sprite.height*0.5 },
+                    (Vector2){ .x = e->pos.x - ship.sprite.width*0.5, .y = e->pos.y - ship.sprite.height*0.5 },
                     WHITE);
             Rectangle hitbox =
             {
@@ -429,28 +443,28 @@ int main(void) {
                 Enemy *e = enemy_buf + i;
 
                 DrawTextureV(e->sprite,
-                        {
-                        .x = e->pos.x - e->sprite.width*0.5,
-                        .y = e->pos.y - e->sprite.height*0.5
+                        (Vector2){
+                        .x = e->entity.pos.x - e->sprite.width*0.5,
+                        .y = e->entity.pos.y - e->sprite.height*0.5
                         },
                         WHITE);
 
                 Rectangle hitbox =
                 {
-                    .x = e->pos.x - e->half_width, .y = e->pos.y - e->half_height,
-                    .width = TIMES2(e->half_width),
-                    .height = TIMES2(e->half_height),
+                    .x = e->entity.pos.x - e->entity.half_width, .y = e->entity.pos.y - e->entity.half_height,
+                    .width = TIMES2(e->entity.half_width),
+                    .height = TIMES2(e->entity.half_height),
                 };
                 DrawRectangleLinesEx(hitbox, 1.0, YELLOW);
             }
 
-            for(int i = 0; i < ship.missile_launcher.pos; ++i) {
+            for(int i = 0; i < ship.missile_launcher.n; ++i) {
                 if(ship.missile_launcher.live[i] == false) continue;
 
                 Missile *m = ship.missile_launcher.buf + i;
                 Rectangle rec =
                 {
-                    .x = m->pos.x - m->half_width, .y = m->pos.y - m->half_height,
+                    .x = m->entity.pos.x - m->entity.half_width, .y = m->entity.pos.y - m->entity.half_height,
                     .width = m->rec.width, .height = m->rec.height,
                 };
                 DrawRectangleRec(rec, m->color);
@@ -461,13 +475,13 @@ int main(void) {
 
                 Enemy *e = enemy_buf + enemy_index;
 
-                for(int i = 0; i < e->missile_launcher.pos; ++i) {
+                for(int i = 0; i < e->missile_launcher.n; ++i) {
                     if(e->missile_launcher.live[i] == false) continue;
 
                     Missile *m = e->missile_launcher.buf + i;
                     Rectangle rec =
                     {
-                        .x = m->pos.x - m->half_width, .y = m->pos.y - m->half_height,
+                        .x = m->entity.pos.x - m->entity.half_width, .y = m->entity.pos.y - m->entity.half_height,
                         .width = m->rec.width, .height = m->rec.height,
                     };
                     DrawRectangleRec(rec, m->color);

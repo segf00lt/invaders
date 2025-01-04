@@ -1,6 +1,6 @@
-CC = clang++ -std=c++11
-FLAGS = -g -O0 -Wall -Wpedantic -Werror -Wno-switch -Wno-comment -Wno-format-pedantic -Wno-narrowing -Wno-c99-extensions -D'_UNITY_BUILD_'
-TARGET = invaders.cpp
+CC = clang
+FLAGS = -g -O0 -Wall -Wpedantic -Werror -Wno-switch -Wno-comment -Wno-format-pedantic -D'_UNITY_BUILD_'
+TARGET = invaders.c
 LDFLAGS = -lraylib -lm
 
 UNAME_S = $(shell uname -s)
@@ -11,7 +11,7 @@ ifeq ($(UNAME_S),Darwin)
 endif
 
 all:
-	ctags -w *.cpp *.h
+	ctags -w *.c *.h
 	$(CC) $(FLAGS) $(TARGET) -o invaders $(LDFLAGS)
 
 #test: all
