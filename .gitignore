@@ -1,0 +1,7 @@
+*.vim
+a.out
+invaders
+.DS_Store
+.vscode
+*.dSYM
+tags
