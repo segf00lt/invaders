@@ -25,13 +25,16 @@ const int   SCREEN_HEIGHT = 900;
 const float TITLE_SCREEN_INFO_TEXT_BLINK_RATE = 0.65;
 const float TITLE_SCREEN_TITLE_SCROLL_SPEED = -400.0;
 
+const float BACKGROUND_SCROLL_SPEED = 400;
+
 const float GAME_OVER_DELAY_TIME_MAX = 2.0;
 
-const float WAVE_TRANSITIONE_DELAY_TIME_MAX = 1.4;
+const float WAVE_TRANSITION_DELAY_TIME_MAX = 2.2;
+const float WAVE_TRANSITION_BANNER_TIME_MAX = 2.0;
 
 const int   SHIP_Y_COORD = SCREEN_HEIGHT - 200;
 const float SHIP_ACCEL = 4e4;
-const float SHIP_START_GAME_Y_VELOCITY = -200;
+const float SHIP_START_GAME_Y_VELOCITY = -300;
 const int   SHIP_TOTAL_HEALTH = 4;
 const float SHIP_FIRE_RATE = 0.3;
 
@@ -107,6 +110,7 @@ int  make_missile(Missile_emitter *emitter, Vector2 pos, Vector2 vel);
 void destroy_missile(Missile_emitter *emitter, int i);
 
 void init_enemies(void);
+void init_ship(void);
 
 void init_game_state(void);
 
@@ -120,7 +124,7 @@ void main_game_update(void);
 void title_screen_update(void);
 void start_game_update(void);
 void game_over_update(void);
-void wave_transition_update(void); //TODO
+void wave_transition_update(void);
 
 void draw(void);
 
@@ -130,16 +134,23 @@ int  main(void);
 /* globals */
 
 float timestep;
-bool game_over = false;
+
 float game_over_delay_time = 0.0;
+bool game_over = false;
+
 bool started_game = false;
 bool pressed_start = false;
+
+bool do_wave_transition;
+
 bool initialized_enemies_for_new_wave = false;
+
 bool title_screen_info_text_blink = true;
 float title_screen_info_text_blink_time = 0.0f;
 float title_screen_title_y = 200;
 
 float wave_transition_delay_time = 0.0f;
+float wave_transition_banner_time = 0.0f;
 
 bool ship_is_in_position = false;
 
@@ -147,7 +158,7 @@ Texture2D enemy_sprite;
 
 Texture2D background;
 Rectangle background_frame;
-float background_scroll_speed = 400;
+float background_scroll_speed = BACKGROUND_SCROLL_SPEED;
 
 Missile_emitter missile_emitter_buf[MAX_ENEMIES + 1];
 int missile_emitter_buf_allocated = 0;
@@ -157,6 +168,8 @@ int live_enemies_count = ENEMY_WAVE_SIZE;
 int enemy_buf_allocated = 0;
 Vector2 enemy_formation_top_left_pos;
 Enemy_formation enemy_formation = { .strafe_vel = { -ENEMY_STRAFE_SPEED } };
+
+int wave_count = 1;
 int enemies_killed = 0;
 
 void (*game_update)(void);
@@ -479,6 +492,7 @@ void title_screen_update(void) {
             title_screen_title_y += TITLE_SCREEN_TITLE_SCROLL_SPEED * timestep;
             if(title_screen_title_y <= -100) {
                 init_game_state();
+                init_ship();
                 game_update = start_game_update;
             }
         }
@@ -496,22 +510,9 @@ void start_game_update(void) {
 
     if(ship_is_in_position) { /* enemy update */
 
-        enemy_formation_top_left_pos.y += ENEMY_START_GAME_Y_VELOCITY * timestep;
+        ship_is_in_position = false;
 
-        for(int i = 0; i < enemy_formation.enemy_count; ++i) {
-            int enemy_index = enemy_formation.enemy_indexes[i];
-
-            assert(enemy_buf[enemy_index].live);
-
-            Entity *e = enemy_buf + enemy_index;
-            e->pos.y += ENEMY_START_GAME_Y_VELOCITY * timestep;
-        }
-
-        if(enemy_formation_top_left_pos.y >= ENEMY_FORMATION_INITIAL_TOP_LEFT_Y) {
-            enemy_formation_top_left_pos.y = ENEMY_FORMATION_INITIAL_TOP_LEFT_Y;
-            ship_is_in_position = false;
-            game_update = main_game_update;
-        }
+        game_update = wave_transition_update;
     }
 
 }
@@ -529,7 +530,9 @@ void game_over_update(void) {
         }
 
         if(pressed_start) {
+            pressed_start = false;
             init_game_state();
+            init_ship();
             game_update = start_game_update;
         }
     } else {
@@ -556,30 +559,48 @@ void wave_transition_update(void) {
 
     missile_update();
 
-    if(wave_transition_delay_time >= WAVE_TRANSITIONE_DELAY_TIME_MAX) {
-        if(!initialized_enemies_for_new_wave) {
-            init_enemies();
-            initialized_enemies_for_new_wave = true;
-        }
+    if(wave_transition_delay_time >= WAVE_TRANSITION_DELAY_TIME_MAX && background_scroll_speed <= BACKGROUND_SCROLL_SPEED) {
+        if(wave_transition_banner_time >= WAVE_TRANSITION_BANNER_TIME_MAX) {
+            do_wave_transition = false;
 
-        enemy_formation_top_left_pos.y += ENEMY_START_GAME_Y_VELOCITY * timestep;
+            if(!initialized_enemies_for_new_wave) {
+                init_enemies();
+                printf("live_enemies_count = %i\n", live_enemies_count);
+                initialized_enemies_for_new_wave = true;
+            }
 
-        for(int i = 0; i < enemy_formation.enemy_count; ++i) {
-            int enemy_index = enemy_formation.enemy_indexes[i];
+            enemy_formation_top_left_pos.y += ENEMY_START_GAME_Y_VELOCITY * timestep;
 
-            assert(enemy_buf[enemy_index].live);
+            for(int i = 0; i < enemy_formation.enemy_count; ++i) {
+                int enemy_index = enemy_formation.enemy_indexes[i];
 
-            Entity *e = enemy_buf + enemy_index;
-            e->pos.y += ENEMY_START_GAME_Y_VELOCITY * timestep;
-        }
+                assert(enemy_buf[enemy_index].live);
 
-        if(enemy_formation_top_left_pos.y >= ENEMY_FORMATION_INITIAL_TOP_LEFT_Y) {
-            enemy_formation_top_left_pos.y = ENEMY_FORMATION_INITIAL_TOP_LEFT_Y;
-            initialized_enemies_for_new_wave = false;
-            wave_transition_delay_time = 0;
-            game_update = main_game_update;
+                Entity *e = enemy_buf + enemy_index;
+                e->pos.y += ENEMY_START_GAME_Y_VELOCITY * timestep;
+            }
+
+            if(enemy_formation_top_left_pos.y >= ENEMY_FORMATION_INITIAL_TOP_LEFT_Y) {
+                enemy_formation_top_left_pos.y = ENEMY_FORMATION_INITIAL_TOP_LEFT_Y;
+                initialized_enemies_for_new_wave = false;
+                wave_count += 1;
+                wave_transition_banner_time = 0;
+                wave_transition_delay_time = 0;
+                game_update = main_game_update;
+            }
+        } else {
+            background_scroll_speed = BACKGROUND_SCROLL_SPEED;
+            do_wave_transition = true;
+            wave_transition_banner_time += timestep;
         }
     } else {
+
+        float t = wave_transition_delay_time;
+        float a = 188.0;
+        float r = WAVE_TRANSITION_DELAY_TIME_MAX;
+        float s = BACKGROUND_SCROLL_SPEED;
+        background_scroll_speed = -a * SQUARE(t) + 2*a * r * t + s;
+
         wave_transition_delay_time += timestep;
     }
 }
@@ -632,36 +653,30 @@ void init_enemies(void) {
         };
 }
 
+void init_ship(void) {
+    ship.missile_emitter_id = make_missile_emitter((Color){ 255, 10, 40, 255 }, enemy_buf, STATICARRLEN(enemy_buf));
+    ship.pos.x = HALF(SCREEN_WIDTH);
+    ship.pos.y = SHIP_Y_COORD + 400;
+    ship.half_width = 20;
+    ship.half_height = 30;
+    ship.live = true;
+    ship.health = SHIP_TOTAL_HEALTH;
+    ship.fire_rate = SHIP_FIRE_RATE;
+}
+
 void init_game_state(void) {
     missile_emitter_buf_allocated = 0;
     enemy_buf_allocated = 0;
 
-    if(game_over || pressed_start) {
-        memset(missile_emitter_buf, 0, sizeof(missile_emitter_buf));
-        memset(enemy_buf, 0, sizeof(enemy_buf));
-    }
-
     game_over = false;
+
+    wave_count = 1;
 
     game_over_delay_time = 0;
     enemies_killed = 0;
 
     pressed_start = false;
     started_game = true;
-
-    init_enemies();
-
-    { /* initialize ship */
-        ship.missile_emitter_id = make_missile_emitter((Color){ 255, 10, 40, 255 }, enemy_buf, live_enemies_count);
-        ship.pos.x = HALF(SCREEN_WIDTH);
-        ship.pos.y = SHIP_Y_COORD + 400;
-        ship.half_width = 20;
-        ship.half_height = 30;
-        ship.live = true;
-        ship.health = SHIP_TOTAL_HEALTH;
-        ship.fire_rate = SHIP_FIRE_RATE;
-    } /* initialize ship */
-
 }
 
 INLINE void draw(void) {
@@ -756,8 +771,18 @@ INLINE void draw(void) {
             int game_over_font_size = 60;
             int game_over_text_width = MeasureText(game_over_text, game_over_font_size);
             int x =  (SCREEN_WIDTH >> 1) - (game_over_text_width >> 1);
-            int y = (SCREEN_HEIGHT >> 1);
+            int y = (SCREEN_HEIGHT >> 1) - 100;
             DrawText(game_over_text, x, y, game_over_font_size, ENEMY_MISSILE_COLOR);
+        }
+
+        if(do_wave_transition) {
+            char wave_banner_text[64];
+            stbsp_sprintf(wave_banner_text, "WAVE %i", wave_count);
+            int wave_banner_font_size = 60;
+            int wave_banner_text_width = MeasureText(wave_banner_text, wave_banner_font_size);
+            int x =  (SCREEN_WIDTH >> 1) - (wave_banner_text_width >> 1);
+            int y = (SCREEN_HEIGHT >> 1) - 100;
+            DrawText(wave_banner_text, x, y, wave_banner_font_size, RAYWHITE);
         }
 
         {
