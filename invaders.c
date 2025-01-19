@@ -24,7 +24,10 @@ const int   SCREEN_WIDTH = 1100;
 const int   SCREEN_HEIGHT = 900;
 const float TITLE_SCREEN_INFO_TEXT_BLINK_RATE = 0.65;
 const float TITLE_SCREEN_TITLE_SCROLL_SPEED = -400.0;
+
 const float GAME_OVER_DELAY_TIME_MAX = 2.0;
+
+const float WAVE_TRANSITIONE_DELAY_TIME_MAX = 1.4;
 
 const int   SHIP_Y_COORD = SCREEN_HEIGHT - 200;
 const float SHIP_ACCEL = 4e4;
@@ -75,11 +78,12 @@ struct Missile {
 
 struct Missile_emitter {
     Missile buf[MAX_MISSILES];
-    bool    live[MAX_MISSILES];
+    bool    live_missiles[MAX_MISSILES];
     Entity *missile_targets;
     int     missile_targets_count;
     Color   color;
     int     n;
+    bool    live;
 };
 
 struct Enemy_formation {
@@ -95,19 +99,31 @@ struct Enemy_formation {
 
 int  make_enemy(Vector2 pos);
 void destroy_enemy(int i);
+
+int  make_missile_emitter(Color color, Entity *missile_targets, int missile_targets_count);
+void destroy_missile_emitter(int i);
+
 int  make_missile(Missile_emitter *emitter, Vector2 pos, Vector2 vel);
 void destroy_missile(Missile_emitter *emitter, int i);
+
+void init_enemies(void);
+
 void init_game_state(void);
+
 void scroll_background(void);
+
 void ship_update(void);
 void enemy_update(void);
 void missile_update(void);
+
 void main_game_update(void);
 void title_screen_update(void);
 void start_game_update(void);
 void game_over_update(void);
 void wave_transition_update(void); //TODO
+
 void draw(void);
+
 int  main(void);
 
 
@@ -118,9 +134,12 @@ bool game_over = false;
 float game_over_delay_time = 0.0;
 bool started_game = false;
 bool pressed_start = false;
+bool initialized_enemies_for_new_wave = false;
 bool title_screen_info_text_blink = true;
 float title_screen_info_text_blink_time = 0.0f;
 float title_screen_title_y = 200;
+
+float wave_transition_delay_time = 0.0f;
 
 bool ship_is_in_position = false;
 
@@ -166,13 +185,7 @@ INLINE int make_enemy(Vector2 pos) {
     e->half_height = enemy_sprite.height*0.5;
     e->health = 1;
 
-    e->missile_emitter_id = missile_emitter_buf_allocated;
-    missile_emitter_buf_allocated += 1;
-
-    missile_emitter_buf[e->missile_emitter_id].color = (Color){ 0, 255, 100, 255 };
-
-    missile_emitter_buf[e->missile_emitter_id].missile_targets = &ship;
-    missile_emitter_buf[e->missile_emitter_id].missile_targets_count = 1;
+    e->missile_emitter_id = make_missile_emitter((Color){ 0, 255, 100, 255 }, &ship, 1);
 
     e->sprite = enemy_sprite;
 
@@ -183,14 +196,40 @@ INLINE int make_enemy(Vector2 pos) {
 }
 
 INLINE void destroy_enemy(int i) {
+    destroy_missile_emitter(enemy_buf[i].missile_emitter_id);
     enemy_buf[i].live = false;
+}
+
+INLINE int make_missile_emitter(Color color, Entity *missile_targets, int missile_targets_count) {
+    int i = 0;
+    int increment = 1;
+    for(; i < missile_emitter_buf_allocated; ++i) {
+        if(missile_emitter_buf[i].live == false) {
+            increment = 0;
+            break;
+        }
+    }
+
+    missile_emitter_buf_allocated += increment;
+
+    missile_emitter_buf[i].color = color;
+    missile_emitter_buf[i].live = true;
+
+    missile_emitter_buf[i].missile_targets = missile_targets;
+    missile_emitter_buf[i].missile_targets_count = missile_targets_count;
+
+    return i;
+}
+
+INLINE void destroy_missile_emitter(int i) {
+    missile_emitter_buf[i].live = false;
 }
 
 INLINE int make_missile(Missile_emitter *emitter, Vector2 pos, Vector2 vel) {
     int i = 0;
     int increment = 1;
     for(; i < emitter->n; ++i) {
-        if(emitter->live[i] == false) {
+        if(emitter->live_missiles[i] == false) {
             increment = 0;
             break;
         }
@@ -205,14 +244,14 @@ INLINE int make_missile(Missile_emitter *emitter, Vector2 pos, Vector2 vel) {
     m->half_height = m->rec.height*0.5;
     m->vel = vel;
 
-    emitter->live[i] = true;
+    emitter->live_missiles[i] = true;
     emitter->n += increment;
 
     return i;
 }
 
 INLINE void destroy_missile(Missile_emitter *emitter, int i) {
-    emitter->live[i] = false;
+    emitter->live_missiles[i] = false;
 }
 
 INLINE void scroll_background(void) {
@@ -277,7 +316,7 @@ INLINE void enemy_update(void) {
         if(enemy_buf[i].hit == true) {
             enemy_buf[i].health -= 1;
             if(enemy_buf[i].health <= 0) {
-                enemy_buf[i].live = false;
+                destroy_enemy(i);
                 enemies_killed += 1;
             }
             enemy_buf[i].hit = false;
@@ -311,12 +350,18 @@ INLINE void enemy_update(void) {
 }
 
 INLINE void missile_update(void) {
-    Missile_emitter *last_emitter = missile_emitter_buf + STATICARRLEN(missile_emitter_buf);
+    Missile_emitter *last_emitter = missile_emitter_buf + missile_emitter_buf_allocated;
+
+    int n_consecutive_dead_emitters = 0;
 
     for(Missile_emitter *missile_emitter = missile_emitter_buf;  missile_emitter < last_emitter; ++missile_emitter) {
+
         int n_consecutive_dead_missiles = 0;
+
+        if(missile_emitter->live == false && missile_emitter->n <= 0) continue;
+
         for(int i = 0; i < missile_emitter->n; ++i) {
-            if(missile_emitter->live[i] == false) {
+            if(missile_emitter->live_missiles[i] == false) {
                 n_consecutive_dead_missiles += 1;
                 continue;
             }
@@ -348,6 +393,8 @@ INLINE void missile_update(void) {
                 if(CheckCollisionRecs(target_hitbox, missile_hitbox)) {
                     destroy_missile(missile_emitter, i);
                     target_entity->hit = true;
+                } else if(missile_hitbox.y > SCREEN_HEIGHT) {
+                    destroy_missile(missile_emitter, i);
                 }
             }
 
@@ -355,7 +402,15 @@ INLINE void missile_update(void) {
 
         missile_emitter->n -= n_consecutive_dead_missiles;
 
+        if(missile_emitter->n <= 0 && missile_emitter->live == false) {
+            n_consecutive_dead_emitters += 1;
+        } else {
+            n_consecutive_dead_emitters = 0;
+        }
+
     }
+
+    missile_emitter_buf_allocated -= n_consecutive_dead_emitters;
 
 }
 
@@ -408,6 +463,10 @@ void main_game_update(void) {
     enemy_update();
 
     missile_update();
+
+    if(live_enemies_count <= 0) {
+        game_update = wave_transition_update;
+    }
 }
 
 void title_screen_update(void) {
@@ -479,16 +538,108 @@ void game_over_update(void) {
 }
 
 void wave_transition_update(void) {
+    {
+        ship.accel.x = 0;
+
+        if(IsKeyDown(KEY_A)) ship.accel.x += -SHIP_ACCEL;
+        else ship.vel.x = 0;
+
+        if(IsKeyDown(KEY_D)) ship.accel.x += SHIP_ACCEL;
+        else ship.vel.x = 0;
+
+        float a_times_t = ship.accel.x * timestep;
+        ship.vel.x += a_times_t;
+        ship.pos.x += a_times_t*timestep*0.5 + ship.vel.x*timestep;
+
+        ship.pos.x = Clamp(ship.pos.x, ship.half_width, SCREEN_WIDTH - ship.half_width);
+    }
+
+    missile_update();
+
+    if(wave_transition_delay_time >= WAVE_TRANSITIONE_DELAY_TIME_MAX) {
+        if(!initialized_enemies_for_new_wave) {
+            init_enemies();
+            initialized_enemies_for_new_wave = true;
+        }
+
+        enemy_formation_top_left_pos.y += ENEMY_START_GAME_Y_VELOCITY * timestep;
+
+        for(int i = 0; i < enemy_formation.enemy_count; ++i) {
+            int enemy_index = enemy_formation.enemy_indexes[i];
+
+            assert(enemy_buf[enemy_index].live);
+
+            Entity *e = enemy_buf + enemy_index;
+            e->pos.y += ENEMY_START_GAME_Y_VELOCITY * timestep;
+        }
+
+        if(enemy_formation_top_left_pos.y >= ENEMY_FORMATION_INITIAL_TOP_LEFT_Y) {
+            enemy_formation_top_left_pos.y = ENEMY_FORMATION_INITIAL_TOP_LEFT_Y;
+            initialized_enemies_for_new_wave = false;
+            wave_transition_delay_time = 0;
+            game_update = main_game_update;
+        }
+    } else {
+        wave_transition_delay_time += timestep;
+    }
+}
+
+void init_enemies(void) {
+    enemy_formation = (Enemy_formation){ .strafe_vel = { -ENEMY_STRAFE_SPEED } };
+
+    live_enemies_count = ENEMY_WAVE_SIZE;
+
+    int row_size = ENEMY_WAVE_SIZE / 3;
+    float formation_spacing = 50.0;
+    float formation_width = (enemy_sprite.width + formation_spacing) * row_size;
+    float formation_x_offset = (SCREEN_WIDTH - formation_width) * 0.5;
+
+    float width_section = formation_width / row_size;
+    float half_width_section = width_section*0.5;
+    float current_x = formation_x_offset;
+    float current_y = ENEMY_FORMATION_INITIAL_TOP_LEFT_Y - 550;
+    for(int i = 0; i < ENEMY_WAVE_SIZE;) {
+        int enemy_index = make_enemy((Vector2){ current_x + half_width_section, current_y });
+        current_x += width_section;
+
+        enemy_formation.enemy_indexes[enemy_formation.enemy_count++] = enemy_index;
+
+        i++;
+
+        if(i % row_size == 0) {
+            current_y += enemy_sprite.height*0.5 + formation_spacing;
+            current_x = formation_x_offset;
+        }
+    }
+
+    for(int i = 0; i < MAX_SIMULTANEOUS_FIRING_ENEMIES; ++i) {
+        int enemy_index = GetRandomValue(0, enemy_buf_allocated - 1);
+        if(enemy_index & 0x1) {
+            enemy_buf[enemy_index].total_firing_time = ENEMY_ODD_FIRING_TIME;
+            enemy_buf[enemy_index].fire_rate = ENEMY_ODD_FIRE_RATE;
+        } else {
+            enemy_buf[enemy_index].total_firing_time = ENEMY_EVEN_FIRING_TIME;
+            enemy_buf[enemy_index].fire_rate = ENEMY_EVEN_FIRE_RATE;
+        }
+        enemy_buf[enemy_index].shot_timer = 0.0;
+        enemy_formation.firing_enemy_indexes[enemy_formation.firing_enemy_count++] = enemy_index;
+    }
+
+    enemy_formation_top_left_pos =
+        (Vector2) {
+            .x = enemy_buf[enemy_formation.enemy_indexes[0]].pos.x,
+            .y = enemy_buf[enemy_formation.enemy_indexes[0]].pos.y,
+        };
 }
 
 void init_game_state(void) {
     missile_emitter_buf_allocated = 0;
     enemy_buf_allocated = 0;
 
-    memset(missile_emitter_buf, 0, sizeof(missile_emitter_buf));
-    memset(enemy_buf, 0, sizeof(enemy_buf));
-
-    enemy_formation = (Enemy_formation){ .strafe_vel = { -ENEMY_STRAFE_SPEED } };
+    if(game_over || pressed_start) {
+        memset(missile_emitter_buf, 0, sizeof(missile_emitter_buf));
+        memset(enemy_buf, 0, sizeof(enemy_buf));
+    }
 
     game_over = false;
 
@@ -498,61 +649,10 @@ void init_game_state(void) {
     pressed_start = false;
     started_game = true;
 
-    live_enemies_count = ENEMY_WAVE_SIZE;
-
-    { /* initialize enemies */
-
-        int row_size = ENEMY_WAVE_SIZE / 3;
-        float formation_spacing = 50.0;
-        float formation_width = (enemy_sprite.width + formation_spacing) * row_size;
-        float formation_x_offset = (SCREEN_WIDTH - formation_width) * 0.5;
-
-        float width_section = formation_width / row_size;
-        float half_width_section = width_section*0.5;
-        float current_x = formation_x_offset;
-        float current_y = ENEMY_FORMATION_INITIAL_TOP_LEFT_Y - 550;
-        for(int i = 0; i < ENEMY_WAVE_SIZE;) {
-            int enemy_index = make_enemy((Vector2){ current_x + half_width_section, current_y });
-            current_x += width_section;
-
-            enemy_formation.enemy_indexes[enemy_formation.enemy_count++] = enemy_index;
-
-            i++;
-
-            if(i % row_size == 0) {
-                current_y += enemy_sprite.height*0.5 + formation_spacing;
-                current_x = formation_x_offset;
-            }
-        }
-
-        for(int i = 0; i < MAX_SIMULTANEOUS_FIRING_ENEMIES; ++i) {
-            int enemy_index = GetRandomValue(0, enemy_buf_allocated - 1);
-            if(enemy_index & 0x1) {
-                enemy_buf[enemy_index].total_firing_time = ENEMY_ODD_FIRING_TIME;
-                enemy_buf[enemy_index].fire_rate = ENEMY_ODD_FIRE_RATE;
-            } else {
-                enemy_buf[enemy_index].total_firing_time = ENEMY_EVEN_FIRING_TIME;
-                enemy_buf[enemy_index].fire_rate = ENEMY_EVEN_FIRE_RATE;
-            }
-            enemy_buf[enemy_index].shot_timer = 0.0;
-            enemy_formation.firing_enemy_indexes[enemy_formation.firing_enemy_count++] = enemy_index;
-        }
-
-        enemy_formation_top_left_pos =
-            (Vector2) {
-                .x = enemy_buf[enemy_formation.enemy_indexes[0]].pos.x,
-                .y = enemy_buf[enemy_formation.enemy_indexes[0]].pos.y,
-            };
-
-    } /* initialize enemies */
+    init_enemies();
 
     { /* initialize ship */
-        ship.missile_emitter_id = missile_emitter_buf_allocated;
-        missile_emitter_buf_allocated += 1;
-        Missile_emitter *missile_emitter = &missile_emitter_buf[ship.missile_emitter_id];
-        missile_emitter->color = (Color){ 255, 10, 40, 255 };
-        missile_emitter->missile_targets = enemy_buf;
-        missile_emitter->missile_targets_count = live_enemies_count;
+        ship.missile_emitter_id = make_missile_emitter((Color){ 255, 10, 40, 255 }, enemy_buf, live_enemies_count);
         ship.pos.x = HALF(SCREEN_WIDTH);
         ship.pos.y = SHIP_Y_COORD + 400;
         ship.half_width = 20;
@@ -617,7 +717,7 @@ INLINE void draw(void) {
         Missile_emitter *missile_emitter = missile_emitter_buf + i;
 
         for(int i = 0; i < missile_emitter->n; ++i) {
-            if(missile_emitter->live[i] == false) continue;
+            if(missile_emitter->live_missiles[i] == false) continue;
 
             Missile *m = missile_emitter->buf + i;
             Rectangle rec =
