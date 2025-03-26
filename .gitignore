@@ -5,3 +5,4 @@ invaders
 .vscode
 *.dSYM
 tags
+vgcore*

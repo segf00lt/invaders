@@ -15,14 +15,19 @@
 #define SIGN_EXTEND_S64(x, n) (s64)((n >= 64) ? (s64)x : (s64)((s64)x | (s64)(-((s64)x >> ((s64)n - 1lu)) << (s64)n)))
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
-#define STATICARRLEN(x) (sizeof(x)/sizeof(*x))
+#define ARRLEN(x) (sizeof(x)/sizeof(*x))
 #define STRLEN(x) ((sizeof(x)/sizeof(*x))-1)
 #define Arr(T) T *
 #define Map(K, V) struct { K key; V value; } *
 #define Dict(V) struct { char *key; V value; } *
-#define UNREACHABLE assert("UNREACHABLE"&&0)
-#define UNIMPLEMENTED assert("UNIMPLEMENTED"&&0)
-#define PASS assert("PASS"&&1)
+#define UNREACHABLE assert(!"UNREACHABLE")
+#define UNIMPLEMENTED assert(!"UNIMPLEMENTED")
+#define GLUE_(a,b) a##b
+#define GLUE(a,b) GLUE_(a,b)
+#define STATIC_ASSERT(expr, id) u8 GLUE(id, __LINE__)[(expr)?1:-1]
+#define PANIC(msg) assert(!msg)
+#define PASS assert(1)
+#define NOOP (0+0)
 #define DUNNO fprintf(stderr, "======\nDUNNO WHAT HAPPENS ON LINE %i IN %s()\n======\n", __LINE__, __func__)
 #define INLINE __attribute__((always_inline)) inline
 #if defined(stbsp_sprintf) && defined(stbsp_snprintf)
