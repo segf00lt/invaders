@@ -1,4 +1,5 @@
 *.vim
+*.o
 a.out
 invaders
 .DS_Store
