@@ -1,364 +1,7 @@
-#include <raylib.h>
-#include <raymath.h>
-#include "basic.h"
-#include "stb_sprintf.h"
-#include "arena.h"
+#include "invaders.h"
 
 
-#define TARGET_FPS 60
-
-#define WINDOW_WIDTH  1200
-#define WINDOW_HEIGHT 1000
-
-#define WINDOW_RECT (Rectangle){0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}
-
-#define MAX_ENTITIES  4096
-
-#define MAX_SHOOTING_INVADERS_PER_FORMATION 3
-
-#define MAX_ENTITIES_PER_FORMATION 36
-
-#define BACKGROUND_SCROLL_SPEED ((float)400.0)
-
-#define FRICTION ((float)40.0)
-
-#define TITLE_BANNER_INITIAL_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 0.22 }
-#define TITLE_BANNER_FONT_SIZE ((float)88.0f)
-#define TITLE_BANNER_FONT_SPACING ((float)6.0f)
-#define TITLE_BANNER_COLOR (Color){ 245, 245, 245, 255 }
-#define TITLE_BANNER_SCROLL_SPEED ((float)300)
-#define TITLE_BANNER_MIN_Y ((float)-120)
-
-#define TITLE_HINT_INITIAL_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 0.33 }
-#define TITLE_HINT_FONT_SIZE ((float)18.8f)
-#define TITLE_HINT_FONT_SPACING ((float)2.0f)
-#define TITLE_HINT_COLOR (Color){ 245, 245, 245, 205 }
-#define TITLE_HINT_BLINK_PERIOD ((float)0.66)
-
-#define PLAYER_INITIAL_OFFSCREEN_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT + 220.0f }
-#define PLAYER_MAIN_Y ((float)WINDOW_HEIGHT - 150.0f)
-#define PLAYER_ENTER_VIEW_SPEED ((float)400)
-#define PLAYER_ACCEL ((float)1.5e4)
-
-#define PLAYER_DAMAGE_BLINK_PERIOD ((float)0.03f)
-#define PLAYER_DAMAGE_BLINK_TOTAL_TIME ((float)1.2f)
-#define PLAYER_DAMAGE_BLINK_SPRITE_TINT (Color){ 155, 0, 0, 255 }
-
-#define PLAYER_MISSILE_LAUNCHER_COOLDOWN ((float)0.32)
-#define PLAYER_HEALTH 4
-
-#define PLAYER_MISSILE_COLOR RED
-#define PLAYER_MISSILE_SIZE (Vector2){ 6, 20 }
-#define PLAYER_MISSILE_SPAWN_OFFSET (Vector2){ 0, -PLAYER_MISSILE_SIZE.y }
-#define PLAYER_MISSILE_VELOCITY (Vector2){ 0, -900 }
-#define PLAYER_MISSILE_DAMAGE_MASK (Entity_kind_mask)(ENTITY_KIND_MASK_INVADER | 0)
-#define PLAYER_MISSILE_DAMAGE 1
-
-#define WAVE_TRANSITION_PRE_DELAY_TIME ((float)0.3f)
-#define WAVE_TRANSITION_POST_DELAY_TIME ((float)0.7f)
-#define WAVE_TRANSITION_RAMP_TIME ((float)2.2f)
-#define WAVE_TRANSITION_RAMP_ACCEL ((float)198.0f)
-#define WAVE_TRANSITION_BANNER_TIME ((float)2.0f)
-
-#define WAVE_BANNER_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 0.4 }
-#define WAVE_BANNER_FONT_SIZE ((float)58.8f)
-#define WAVE_BANNER_FONT_SPACING ((float)2.2f)
-#define WAVE_BANNER_COLOR (Color){ 245, 245, 245, 255 }
-
-#define ENEMY_FORMATION_ROWS 3
-#define ENEMY_FORMATION_COLS 7
-#define ENEMY_FORMATION_SPACING (Vector2){ 50.0f, 25.0f }
-#define ENEMY_FORMATION_INITIAL_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * -0.4 }
-#define ENEMY_FORMATION_MAIN_Y ((float)WINDOW_HEIGHT * 0.16)
-#define ENEMY_FORMATION_STRAFE_VEL_X ((float)150.0f)
-#define ENEMY_FORMATION_ENTER_LEVEL_SPEED ((float)300)
-#define ENEMY_FORMATION_STRAFE_PADDING ((float)15.0)
-
-#define INVADER_MISSILE_COOLDOWN ((float)0.2f)
-#define INVADER_TOTAL_SHOOTING_TIME_LONG ((float)0.8f)
-#define INVADER_TOTAL_SHOOTING_TIME_SHORT ((float)0.2f)
-#define INVADER_MISSILE_SIZE (Vector2){ 6, 20 }
-#define INVADER_MISSILE_COLOR (Color){ 0, 188, 77, 255 }
-#define INVADER_MISSILE_SPAWN_OFFSET (Vector2){ 0, INVADER_MISSILE_SIZE.y }
-#define INVADER_MISSILE_VELOCITY (Vector2){ 0, 700 }
-#define INVADER_MISSILE_DAMAGE_MASK (Entity_kind_mask)(ENTITY_KIND_MASK_PLAYER | 0)
-#define INVADER_MISSILE_DAMAGE 1
-#define INVADER_HEALTH 1
-
-#define SCORE_LABEL_FONT_SIZE ((float)30.0)
-
-#define GAME_OVER_BANNER_FONT_SIZE ((float)70.0)
-#define GAME_OVER_BANNER_PRE_DELAY ((float)1.7)
-
-#define ENTITY_KIND_IN_MASK(kind, mask) (!!(mask & (1ull<<kind)))
-
-/* tables */
-#define GAME_STATES     \
-  X(NONE)               \
-  X(TITLE_SCREEN)       \
-  X(SPAWN_PLAYER)       \
-  X(WAVE_TRANSITION)    \
-  X(SPAWN_ENEMIES)      \
-  X(MAIN_LOOP)          \
-  X(GAME_OVER)          \
-
-#define ENTITY_KINDS    \
-  X(PLAYER)             \
-  X(INVADER)            \
-  X(FORMATION)          \
-  X(MISSILE)            \
-  X(BANNER)             \
-
-#define ENTITY_ORDERS   \
-  X(FIRST)              \
-  X(LAST)               \
-
-#define ENTITY_FLAGS         \
-  X(DYNAMICS)                \
-  X(APPLY_FRICTION)          \
-  X(COLLIDE)                 \
-  X(CLAMP_POS_TO_SCREEN)     \
-  X(HAS_MISSILE_LAUNCHER)    \
-  X(BLINK_TEXT)              \
-  X(DRAW_TEXT)               \
-  X(DRAW_SPRITE)             \
-  X(USE_DAMAGE_BLINK_TINT)   \
-  X(DRAW_BOUNDS)             \
-  X(FILL_BOUNDS)             \
-
-#define ENTITY_CONTROLS            \
-  X(PLAYER)                        \
-  X(ENEMY_FORMATION_ENTER_LEVEL)   \
-  X(ENEMY_FORMATION_MAIN)          \
-  X(INVADER_IN_FORMATION)          \
-  X(MISSILE)                       \
-
-
-/* type definitions */
-typedef struct Game Game;
-typedef struct Player_input Player_input;
-typedef struct Entity Entity;
-typedef struct Missile_launcher Missile_launcher;
-typedef u64 Entity_flags;
-typedef u64 Entity_kind_mask;
-
-typedef enum Game_state {
-#define X(state) GAME_STATE_##state,
-  GAME_STATES
-#undef X
-    GAME_STATE_MAX,
-} Game_state;
-
-char *Game_state_strings[GAME_STATE_MAX] = {
-#define X(state) #state,
-  GAME_STATES
-#undef X
-};
-
-typedef enum Entity_kind {
-  ENTITY_KIND_INVALID = 0,
-#define X(kind) ENTITY_KIND_##kind,
-  ENTITY_KINDS
-#undef X
-    ENTITY_KIND_MAX,
-} Entity_kind;
-
-#define X(kind) const Entity_kind_mask ENTITY_KIND_MASK_##kind = (Entity_kind_mask)(1ull<<ENTITY_KIND_##kind);
-ENTITY_KINDS
-#undef X
-
-STATIC_ASSERT(ENTITY_KIND_MAX < 64, number_of_entity_kinds_is_less_then_64);
-
-typedef enum Entity_order {
-  ENTITY_ORDER_INVALID = -1,
-#define X(order) ENTITY_ORDER_##order,
-  ENTITY_ORDERS
-#undef X
-    ENTITY_ORDER_MAX,
-} Entity_order;
-
-typedef enum Entity_control {
-  ENTITY_CONTROL_NONE = 0,
-#define X(control) ENTITY_CONTROL_##control,
-  ENTITY_CONTROLS
-#undef X
-    ENTITY_CONTROL_MAX
-} Entity_control;
-
-typedef enum Entity_flag_index {
-  ENTITY_FLAG_INDEX_INVALID = -1,
-#define X(flag) ENTITY_FLAG_INDEX_##flag,
-  ENTITY_FLAGS
-#undef X
-    ENTITY_FLAG_INDEX_MAX,
-} Entity_flag_index;
-
-#define X(flag) const Entity_flags ENTITY_FLAG_##flag = (Entity_flags)(1ull<<ENTITY_FLAG_INDEX_##flag);
-ENTITY_FLAGS
-#undef X
-
-STATIC_ASSERT(ENTITY_FLAG_INDEX_MAX < 64, number_of_entity_flags_is_less_then_64);
-
-
-/* struct bodies */
-
-struct Missile_launcher {
-  Vector2 initial_pos;
-  Vector2 initial_vel;
-  Vector2 missile_size;
-  Color   missile_color;
-
-  Entity_kind_mask damage_mask;
-  int              damage_amount;
-
-  u32     shooting;
-  float   cooldown_period;
-  float   cooldown_timer;
-};
-
-struct Entity {
-  u32 live;
-
-  Entity_kind    kind;
-  Entity_order   update_order;
-  Entity_order   draw_order;
-  Entity_control control;
-  Entity_flags   flags;
-
-  u64 genid;
-
-  Vector2 accel;
-  Vector2 vel;
-  Vector2 pos;
-  Vector2 half_size;
-
-  Color bounds_color;
-  Color fill_color;
-
-  Vector2 formation_slot_size;
-  u64     formation_id;
-
-  Missile_launcher missile_launcher;
-
-  Entity_kind_mask damage_mask;
-  int              damage_amount;
-
-  float enemy_total_shooting_time;
-
-  int health;
-  int received_damage;
-
-  Texture2D sprite;
-  Color     sprite_tint;
-  float     sprite_scale;
-
-  float damage_blink_timer;
-  float damage_blink_period;
-  float damage_blink_total_time;
-  int   damage_blink_high;
-  Color damage_blink_sprite_tint;
-
-  char *text;
-  float blink_timer;
-  float blink_period;
-  float font_size;
-  float font_spacing;
-  Color text_color;
-
-  Entity *free_list_next;
-};
-
-struct Player_input {
-  bool move_left;
-  bool move_right;
-  bool stop_move_left;
-  bool stop_move_right;
-  bool shoot;
-  bool pressed_any_key;
-  bool restarted_game;
-  bool hot_reload;
-};
-
-struct Game {
-  float timestep;
-
-  Game_state state;
-  Game_state next_state;
-
-  u64 frame_index;
-
-  Arena frame_scratch;
-
-  char wave_banner_buf[256];
-
-  Entity  entities[MAX_ENTITIES];
-  s64     entities_allocated;
-  Entity *entity_free_list;
-
-  s64 live_entities;
-
-  s64 score;
-
-  Player_input player_input;
-
-  Entity *title_screen_banner;
-  Entity *title_screen_hint;
-  Entity *wave_banner;
-  Entity *player;
-
-  u64 player_genid;
-
-  Entity *enemy_formation;
-
-  u64 current_formation_id;
-
-  Font font;
-
-  int wave_counter;
-
-  float     background_y_offset;
-  float     background_scroll_speed;
-
-  Texture2D background_texture;
-  Texture2D player_texture;
-  Texture2D invader_texture;
-
-  float wave_transition_pre_delay_timer;
-  float wave_transition_post_delay_timer;
-  float wave_transition_ramp_timer;
-  float wave_transition_banner_timer;
-
-  float game_over_banner_pre_delay_timer;
-
-  bool title_screen_scroll_title;
-  bool wave_start_ramped_background_scroll_speed;
-  bool spawned_enemies;
-  bool show_game_over_banner;
-  bool spawned_player;
-
-  bool debug_on;
-
-};
-
-
-/* function headers */
-
-int main(void);
-
-void  game_update_and_draw(Game *gp);
-void  game_reset_frame_scratch(Game *gp);
-void* game_frame_scratch_alloc(Game *gp, size_t bytes);
-
-Entity *entity_spawn(Game *gp);
-void    entity_die(Game *gp, Entity *ep);
-
-void entity_init_title_banner(Game *gp, Entity *ep);
-void entity_init_title_screen_hint_text(Game *gp, Entity *ep);
-void entity_init_player(Game *gp, Entity *ep);
-void entity_init_wave_banner(Game *gp, Entity *ep);
-void entity_init_enemy_formation(Game *gp, Entity *ep);
-void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Vector2 initial_pos);
-void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher launcher);
+/* globals */
 
 
 /* function bodies */
@@ -585,6 +228,44 @@ void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher la
     Vector2Scale(launcher.missile_size, 0.5);
 }
 
+void game_reset(Game *gp) {
+  gp->state = GAME_STATE_NONE;
+  gp->next_state = GAME_STATE_NONE;
+
+  gp->entity_free_list = 0;
+  gp->entities_allocated = 0;
+  gp->live_entities = 0;
+
+  memset(gp->entities, 0, sizeof(Entity) * MAX_ENTITIES);
+
+  gp->frame_index = 0;
+  gp->score = 0;
+  gp->player_genid = 0;
+  gp->title_screen_banner = 0;
+  gp->title_screen_hint = 0;
+  gp->wave_banner = 0;
+  gp->player = 0;
+  gp->player_genid = 0;
+  gp->wave_counter = 0;
+
+  gp->current_formation_id = 0;
+
+  arena_reset(&gp->frame_scratch);
+
+  gp->wave_transition_pre_delay_timer = 0;
+  gp->wave_transition_post_delay_timer = 0;
+  gp->wave_transition_ramp_timer = 0;
+  gp->wave_transition_banner_timer = 0;
+
+  gp->game_over_banner_pre_delay_timer = 0;
+
+  gp->title_screen_scroll_title = 0;
+  gp->wave_start_ramped_background_scroll_speed = 0;
+  gp->spawned_enemies = 0;
+  gp->show_game_over_banner = 0;
+  gp->spawned_player = 0;
+}
+
 void game_update_and_draw(Game *gp) {
   gp->timestep = Clamp(1.0f/10.0f, 1.0f/TARGET_FPS, GetFrameTime());
 
@@ -613,21 +294,25 @@ void game_update_and_draw(Game *gp) {
       gp->player_input.shoot = true;
     }
 
-    if(IsKeyPressed(KEY_F5)) {
-      gp->player_input.restarted_game = true;
+    if(IsKeyPressed(KEY_F5) && IsKeyDown(KEY_LEFT_CONTROL)) {
+      game_reset(gp);
+    }
+
+    if(IsKeyPressed(KEY_F3) && IsKeyDown(KEY_LEFT_CONTROL)) {
+      gp->flags ^= GAME_FLAG_HOT_RELOAD;
     }
 
     if(IsKeyPressed(KEY_F11)) {
-      gp->debug_on = !gp->debug_on;
+      gp->flags  ^= GAME_FLAG_DEBUG_UI;
     }
 
-    // TODO hot reloading
+    if(IsKeyPressed(KEY_F10) && IsKeyDown(KEY_LEFT_CONTROL)) {
+      gp->flags  ^= GAME_FLAG_PLAYER_INVINCIBLE;
+    }
 
-    int key = GetKeyPressed();
+    int key = GetCharPressed();
     if(key != 0) {
-      if(key != KEY_F5 && key != KEY_F11) {
-        gp->player_input.pressed_any_key = true;
-      }
+      gp->player_input.pressed_any_key = true;
     }
 
   } /* input */
@@ -901,6 +586,12 @@ void game_update_and_draw(Game *gp) {
                   ep->damage_blink_sprite_tint = PLAYER_DAMAGE_BLINK_SPRITE_TINT;
                 }
 
+                if(gp->flags & GAME_FLAG_PLAYER_INVINCIBLE) {
+                  if(ep->health <= PLAYER_HEALTH) {
+                    ep->health = PLAYER_HEALTH;
+                  }
+                }
+
                 if(ep->health <= 0) {
                   entity_die(gp, ep);
                   goto entity_update_end;
@@ -1026,6 +717,7 @@ void game_update_and_draw(Game *gp) {
             case ENTITY_CONTROL_INVADER_IN_FORMATION:
               {
                 if(ep->health <= 0) {
+                  gp->score += 5;
                   entity_die(gp, ep);
                   goto entity_update_end;
                 }
@@ -1125,7 +817,7 @@ entity_update_end:
         gp->background_texture,
         (Rectangle){ 0, gp->background_y_offset, WINDOW_WIDTH, WINDOW_HEIGHT },
         (Vector2){0},
-        (Color){255, 255, 255, 120});
+        (Color){255, 255, 255, 160});
 
     for(Entity_order order = ENTITY_ORDER_FIRST; order < ENTITY_ORDER_MAX; order++) {
       for(s64 i = 0; i < MAX_ENTITIES; i++) {
@@ -1222,15 +914,19 @@ entity_update_end:
 
     } /* HUD and UI */
 
-    if(gp->debug_on) { /* debug overlay */
+    if(gp->flags & GAME_FLAG_DEBUG_UI) { /* debug overlay */
       char *debug_text = game_frame_scratch_alloc(gp, 256);
       char *debug_text_fmt =
+        "auto_hot_reload: %s\n"
+        "player_is_invincible: %s\n"
         "frame time: %.3f\n"
         "live entities count: %li\n"
         "most entities allocated: %li\n"
         "game state: %s";
       stbsp_sprintf(debug_text,
           debug_text_fmt,
+          (gp->flags & GAME_FLAG_HOT_RELOAD) ? "on" : "off",
+          (gp->flags & GAME_FLAG_PLAYER_INVINCIBLE) ? "on" : "off",
           gp->timestep,
           gp->live_entities,
           gp->entities_allocated,
@@ -1250,39 +946,39 @@ entity_update_end:
 
 }
 
-int main(void) {
-  InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "invaders 3");
-
-  SetTargetFPS(TARGET_FPS);
-
-  Game *gp = MemAlloc(sizeof(Game));
-  memset(gp, 0, sizeof(Game));
-
-  SetTextLineSpacing(25);
-
-  { /* init game */
-    gp->state = GAME_STATE_NONE;
-    gp->background_scroll_speed = BACKGROUND_SCROLL_SPEED;
-    gp->font = GetFontDefault();
-    arena_init(&gp->frame_scratch);
-
-    gp->background_texture = LoadTexture("sprites/nightsky.png");
-    gp->player_texture = LoadTexture("sprites/ship.png");
-    gp->invader_texture = LoadTexture("sprites/enemy.png");
-  } /* init game */
-
-  while(!WindowShouldClose()) {
-    game_update_and_draw(gp);
-  }
-
-  { /* deinit game */
-    UnloadTexture(gp->background_texture);
-    UnloadTexture(gp->player_texture);
-    UnloadTexture(gp->invader_texture);
-
-  } /* deinit game */
-
-  CloseWindow();
-
-  return 0;
-}
+//int main(void) {
+//  InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Invaders");
+//
+//  SetTargetFPS(TARGET_FPS);
+//
+//  Game *gp = MemAlloc(sizeof(Game));
+//  memset(gp, 0, sizeof(Game));
+//
+//  SetTextLineSpacing(25);
+//
+//  { /* init game */
+//    gp->state = GAME_STATE_NONE;
+//    gp->background_scroll_speed = BACKGROUND_SCROLL_SPEED;
+//    gp->font = GetFontDefault();
+//    arena_init(&gp->frame_scratch);
+//
+//    gp->background_texture = LoadTexture("sprites/nightsky.png");
+//    gp->player_texture = LoadTexture("sprites/ship.png");
+//    gp->invader_texture = LoadTexture("sprites/enemy.png");
+//  } /* init game */
+//
+//  while(!WindowShouldClose()) {
+//    game_update_and_draw(gp);
+//  }
+//
+//  { /* deinit game */
+//    UnloadTexture(gp->background_texture);
+//    UnloadTexture(gp->player_texture);
+//    UnloadTexture(gp->invader_texture);
+//
+//  } /* deinit game */
+//
+//  CloseWindow();
+//
+//  return 0;
+//}

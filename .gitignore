@@ -1,4 +1,6 @@
 *.vim
+*.so
+*.a
 *.o
 a.out
 invaders
