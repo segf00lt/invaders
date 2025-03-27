@@ -10,8 +10,12 @@ typedef void (*Game_update_and_draw_proc)(Game *);
 
 int main(void) {
   InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "invaders 3");
+  InitAudioDevice();
 
   SetTargetFPS(TARGET_FPS);
+  SetTextLineSpacing(10);
+  SetTraceLogLevel(LOG_DEBUG);
+  SetExitKey(0);
 
   Game *gp = MemAlloc(sizeof(Game));
 
@@ -27,11 +31,16 @@ int main(void) {
     gp->player_texture = LoadTexture("sprites/ship.png");
     gp->invader_texture = LoadTexture("sprites/enemy.png");
 
-    gp->flags |= GAME_FLAG_HOT_RELOAD;
-  } /* init game */
+    gp->player_missile_sound = LoadSound("sounds/missile_sound.wav");
+    gp->invader_missile_sound = LoadSound("sounds/invader_missile.wav");
+    gp->invader_die_sound = LoadSound("sounds/invader_damage.wav");
+    gp->player_damage_sound = LoadSound("sounds/player_damage.wav");
+    gp->player_die_sound = LoadSound("sounds/player_die.wav");
+    gp->wave_banner_sound = LoadSound("sounds/wave_banner.wav");
+    gp->hyperspace_jump_sound = LoadSound("sounds/hyperspace_jump.wav");
 
-  SetTextLineSpacing(10);
-  SetTraceLogLevel(LOG_DEBUG);
+    gp->debug_flags |= GAME_DEBUG_FLAG_HOT_RELOAD;
+  } /* init game */
 
   void *game_module = dlopen(INVADERS_MODULE_PATH, RTLD_NOW);
   Game_update_and_draw_proc game_update_and_draw_proc = (Game_update_and_draw_proc)dlsym(game_module, "game_update_and_draw");
@@ -41,7 +50,7 @@ int main(void) {
   while(!WindowShouldClose()) {
     game_update_and_draw_proc(gp);
 
-    if(gp->flags & GAME_FLAG_HOT_RELOAD) {
+    if(gp->debug_flags & GAME_DEBUG_FLAG_HOT_RELOAD) {
       s64 modtime = GetFileModTime(INVADERS_MODULE_PATH);
       if(game_module_modtime != modtime) {
         game_module_modtime = modtime;
@@ -60,9 +69,18 @@ int main(void) {
     UnloadTexture(gp->player_texture);
     UnloadTexture(gp->invader_texture);
 
+    UnloadSound(gp->player_missile_sound);
+    UnloadSound(gp->invader_missile_sound);
+    UnloadSound(gp->invader_die_sound);
+    UnloadSound(gp->player_damage_sound);
+    UnloadSound(gp->player_die_sound);
+    UnloadSound(gp->wave_banner_sound);
+    UnloadSound(gp->hyperspace_jump_sound);
+
   } /* deinit game */
 
   CloseWindow();
+  CloseAudioDevice();
 
   return 0;
 }

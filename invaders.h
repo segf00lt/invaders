@@ -15,7 +15,7 @@
 
 #define WINDOW_RECT (Rectangle){0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}
 
-#define MAX_ENTITIES  4096
+#define MAX_ENTITIES 2048
 
 #define MAX_SHOOTING_INVADERS_PER_FORMATION 3
 
@@ -27,14 +27,14 @@
 
 #define TITLE_BANNER_INITIAL_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 0.22 }
 #define TITLE_BANNER_FONT_SIZE ((float)88.0f)
-#define TITLE_BANNER_FONT_SPACING ((float)6.0f)
+#define TITLE_BANNER_FONT_SPACING ((float)8.8f)
 #define TITLE_BANNER_COLOR (Color){ 245, 245, 245, 255 }
 #define TITLE_BANNER_SCROLL_SPEED ((float)300)
 #define TITLE_BANNER_MIN_Y ((float)-120)
 
 #define TITLE_HINT_INITIAL_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 0.33 }
 #define TITLE_HINT_FONT_SIZE ((float)18.8f)
-#define TITLE_HINT_FONT_SPACING ((float)2.0f)
+#define TITLE_HINT_FONT_SPACING ((float)1.88f)
 #define TITLE_HINT_COLOR (Color){ 245, 245, 245, 205 }
 #define TITLE_HINT_BLINK_PERIOD ((float)0.66)
 
@@ -53,19 +53,19 @@
 #define PLAYER_MISSILE_COLOR RED
 #define PLAYER_MISSILE_SIZE (Vector2){ 6, 20 }
 #define PLAYER_MISSILE_SPAWN_OFFSET (Vector2){ 0, -PLAYER_MISSILE_SIZE.y }
-#define PLAYER_MISSILE_VELOCITY (Vector2){ 0, -900 }
+#define PLAYER_MISSILE_VELOCITY (Vector2){ 0, -1300 }
 #define PLAYER_MISSILE_DAMAGE_MASK (Entity_kind_mask)(ENTITY_KIND_MASK_INVADER | 0)
 #define PLAYER_MISSILE_DAMAGE 1
 
-#define WAVE_TRANSITION_PRE_DELAY_TIME ((float)0.3f)
-#define WAVE_TRANSITION_POST_DELAY_TIME ((float)0.7f)
+#define WAVE_TRANSITION_PRE_DELAY_TIME ((float)0.6f)
+#define WAVE_TRANSITION_POST_DELAY_TIME ((float)0.3f)
 #define WAVE_TRANSITION_RAMP_TIME ((float)2.2f)
-#define WAVE_TRANSITION_RAMP_ACCEL ((float)198.0f)
+#define WAVE_TRANSITION_RAMP_ACCEL ((float)420.0f)
 #define WAVE_TRANSITION_BANNER_TIME ((float)2.0f)
 
 #define WAVE_BANNER_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 0.4 }
 #define WAVE_BANNER_FONT_SIZE ((float)58.8f)
-#define WAVE_BANNER_FONT_SPACING ((float)2.2f)
+#define WAVE_BANNER_FONT_SPACING ((float)5.88f)
 #define WAVE_BANNER_COLOR (Color){ 245, 245, 245, 255 }
 
 #define ENEMY_FORMATION_ROWS 3
@@ -83,15 +83,22 @@
 #define INVADER_MISSILE_SIZE (Vector2){ 6, 20 }
 #define INVADER_MISSILE_COLOR (Color){ 0, 216, 70, 255 }
 #define INVADER_MISSILE_SPAWN_OFFSET (Vector2){ 0, INVADER_MISSILE_SIZE.y }
-#define INVADER_MISSILE_VELOCITY (Vector2){ 0, 700 }
+#define INVADER_MISSILE_VELOCITY (Vector2){ 0, 900 }
 #define INVADER_MISSILE_DAMAGE_MASK (Entity_kind_mask)(ENTITY_KIND_MASK_PLAYER | 0)
 #define INVADER_MISSILE_DAMAGE 1
 #define INVADER_HEALTH 1
 
-#define SCORE_LABEL_FONT_SIZE ((float)30.0)
+#define SCORE_LABEL_FONT_SIZE ((float)30.0f)
 
-#define GAME_OVER_BANNER_FONT_SIZE ((float)70.0)
-#define GAME_OVER_BANNER_PRE_DELAY ((float)1.7)
+#define GAME_OVER_BANNER_FONT_SIZE ((float)70.0f)
+#define GAME_OVER_BANNER_PRE_DELAY ((float)1.7f)
+
+#define PAUSE_BANNER_FONT_SIZE ((float)90.0f)
+#define PAUSE_BANNER_COLOR (Color){ 245, 245, 245, 255 }
+
+#define RESUME_HINT_FONT_SIZE ((float)20.0f)
+#define RESUME_HINT_COLOR (Color){ 245, 245, 245, 205 }
+#define RESUME_HINT_BLINK_PERIOD ((float)0.66)
 
 #define ENTITY_KIND_IN_MASK(kind, mask) (!!(mask & (1ull<<kind)))
 
@@ -105,10 +112,13 @@
   X(MAIN_LOOP)          \
   X(GAME_OVER)          \
 
-#define GAME_FLAGS        \
-    X(DEBUG_UI)           \
-    X(HOT_RELOAD)         \
-    X(PLAYER_INVINCIBLE)  \
+#define GAME_DEBUG_FLAGS     \
+  X(DEBUG_UI)                \
+  X(HOT_RELOAD)              \
+  X(PLAYER_INVINCIBLE)       \
+
+#define GAME_FLAGS      \
+  X(PAUSE)              \
 
 #define ENTITY_KINDS    \
   X(PLAYER)             \
@@ -148,6 +158,7 @@ typedef struct Player_input Player_input;
 typedef struct Entity Entity;
 typedef struct Missile_launcher Missile_launcher;
 typedef u64 Game_flags;
+typedef u64 Game_debug_flags;
 typedef u64 Entity_flags;
 typedef u64 Entity_kind_mask;
 
@@ -165,17 +176,31 @@ char *Game_state_strings[GAME_STATE_MAX] = {
 };
 
 typedef enum Game_flag_index {
-    GAME_FLAG_INDEX_INVALID = -1,
+  GAME_FLAG_INDEX_INVALID = -1,
 #define X(flag) GAME_FLAG_INDEX_##flag,
-    GAME_FLAGS
+  GAME_FLAGS
 #undef X
-        GAME_FLAG_INDEX_MAX,
+    GAME_FLAG_INDEX_MAX,
 } Game_flag_index;
 
 STATIC_ASSERT(GAME_FLAG_INDEX_MAX < 64, number_of_game_flags_is_less_then_64);
 
 #define X(flag) const Game_flags GAME_FLAG_##flag = (Game_flags)(1ull<<GAME_FLAG_INDEX_##flag);
 GAME_FLAGS
+#undef X
+
+typedef enum Game_debug_flag_index {
+  GAME_DEBUG_FLAG_INDEX_INVALID = -1,
+#define X(flag) GAME_DEBUG_FLAG_INDEX_##flag,
+  GAME_DEBUG_FLAGS
+#undef X
+    GAME_DEBUG_FLAG_INDEX_MAX,
+} Game_debug_flag_index;
+
+STATIC_ASSERT(GAME_DEBUG_FLAG_INDEX_MAX < 64, number_of_game_debug_flags_is_less_then_64);
+
+#define X(flag) const Game_debug_flags GAME_DEBUG_FLAG_##flag = (Game_debug_flags)(1ull<<GAME_DEBUG_FLAG_INDEX_##flag);
+GAME_DEBUG_FLAGS
 #undef X
 
 typedef enum Entity_kind {
@@ -231,6 +256,8 @@ struct Missile_launcher {
   Vector2 missile_size;
   Color   missile_color;
 
+  Sound *missile_sound;
+
   Entity_kind_mask damage_mask;
   int              damage_amount;
 
@@ -265,6 +292,8 @@ struct Entity {
 
   Entity_kind_mask damage_mask;
   int              damage_amount;
+
+  Sound *missile_sound;
 
   float enemy_total_shooting_time;
 
@@ -308,7 +337,8 @@ struct Game {
   Game_state state;
   Game_state next_state;
 
-  Game_flags flags;
+  Game_flags       flags;
+  Game_debug_flags debug_flags;
 
   u64 frame_index;
 
@@ -321,6 +351,8 @@ struct Game {
   Entity *entity_free_list;
 
   s64 live_entities;
+
+  s64 live_missiles;
 
   s64 score;
 
@@ -343,10 +375,17 @@ struct Game {
 
   float     background_y_offset;
   float     background_scroll_speed;
-
   Texture2D background_texture;
   Texture2D player_texture;
   Texture2D invader_texture;
+
+  Sound invader_missile_sound;
+  Sound player_missile_sound;
+  Sound invader_die_sound;
+  Sound player_damage_sound;
+  Sound player_die_sound;
+  Sound wave_banner_sound;
+  Sound hyperspace_jump_sound;
 
   float wave_transition_pre_delay_timer;
   float wave_transition_post_delay_timer;
@@ -354,6 +393,9 @@ struct Game {
   float wave_transition_banner_timer;
 
   float game_over_banner_pre_delay_timer;
+
+  float resume_hint_blink_timer;
+  int   resume_hint_blink_high;
 
   bool title_screen_scroll_title;
   bool wave_start_ramped_background_scroll_speed;
@@ -365,8 +407,6 @@ struct Game {
 
 
 /* function headers */
-
-int main(void);
 
 void  game_update_and_draw(Game *gp);
 void  game_reset_frame_scratch(Game *gp);

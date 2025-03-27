@@ -92,7 +92,7 @@ void entity_init_player(Game *gp, Entity *ep) {
     //ENTITY_FLAG_DRAW_BOUNDS |
     0;
 
-  ep->update_order = ENTITY_ORDER_FIRST;
+  ep->update_order = ENTITY_ORDER_LAST;
   ep->draw_order = ENTITY_ORDER_FIRST;
 
   ep->pos = PLAYER_INITIAL_OFFSCREEN_POS;
@@ -103,6 +103,7 @@ void entity_init_player(Game *gp, Entity *ep) {
   ep->missile_launcher.missile_color = PLAYER_MISSILE_COLOR;
   ep->missile_launcher.damage_mask = PLAYER_MISSILE_DAMAGE_MASK;
   ep->missile_launcher.damage_amount = PLAYER_MISSILE_DAMAGE;
+  ep->missile_launcher.missile_sound = &gp->player_missile_sound;
 
   ep->health = PLAYER_HEALTH;
 
@@ -188,6 +189,7 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Ve
   ep->missile_launcher.missile_color = INVADER_MISSILE_COLOR;
   ep->missile_launcher.damage_mask = INVADER_MISSILE_DAMAGE_MASK;
   ep->missile_launcher.damage_amount = INVADER_MISSILE_DAMAGE;
+  ep->missile_launcher.missile_sound = &gp->invader_missile_sound;
 
   ep->health = INVADER_HEALTH;
 
@@ -212,11 +214,13 @@ void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher la
 
   ep->control = ENTITY_CONTROL_MISSILE;
 
-  ep->update_order = ENTITY_ORDER_LAST;
+  ep->update_order = ENTITY_ORDER_FIRST;
   ep->draw_order = ENTITY_ORDER_LAST;
 
   ep->damage_mask = launcher.damage_mask;
   ep->damage_amount = launcher.damage_amount;
+
+  ep->missile_sound = launcher.missile_sound;
 
   ep->pos = launcher.initial_pos;
 
@@ -232,11 +236,15 @@ void game_reset(Game *gp) {
   gp->state = GAME_STATE_NONE;
   gp->next_state = GAME_STATE_NONE;
 
+  gp->flags = 0;
+
   gp->entity_free_list = 0;
   gp->entities_allocated = 0;
   gp->live_entities = 0;
 
   memset(gp->entities, 0, sizeof(Entity) * MAX_ENTITIES);
+
+  gp->background_scroll_speed = BACKGROUND_SCROLL_SPEED;
 
   gp->frame_index = 0;
   gp->score = 0;
@@ -271,6 +279,7 @@ void game_update_and_draw(Game *gp) {
 
   gp->next_state = gp->state;
 
+  // TODO separate key map from input
   { /* input */
     gp->player_input = (Player_input){0};
 
@@ -294,20 +303,30 @@ void game_update_and_draw(Game *gp) {
       gp->player_input.shoot = true;
     }
 
-    if(IsKeyPressed(KEY_F5) && IsKeyDown(KEY_LEFT_CONTROL)) {
+    if(IsKeyPressed(KEY_ESCAPE)) {
+      if(gp->state != GAME_STATE_NONE && gp->state != GAME_STATE_TITLE_SCREEN && gp->state != GAME_STATE_GAME_OVER) {
+        if(!(gp->flags & GAME_FLAG_PAUSE)) {
+          gp->resume_hint_blink_high = 1;
+          gp->resume_hint_blink_timer = 0;
+        }
+        gp->flags ^= GAME_FLAG_PAUSE;
+      }
+    }
+
+    if(IsKeyPressed(KEY_F5)) {
       game_reset(gp);
     }
 
-    if(IsKeyPressed(KEY_F3) && IsKeyDown(KEY_LEFT_CONTROL)) {
-      gp->flags ^= GAME_FLAG_HOT_RELOAD;
+    if(IsKeyPressed(KEY_F3)) {
+      gp->debug_flags ^= GAME_DEBUG_FLAG_HOT_RELOAD;
     }
 
     if(IsKeyPressed(KEY_F11)) {
-      gp->flags  ^= GAME_FLAG_DEBUG_UI;
+      gp->debug_flags  ^= GAME_DEBUG_FLAG_DEBUG_UI;
     }
 
-    if(IsKeyPressed(KEY_F10) && IsKeyDown(KEY_LEFT_CONTROL)) {
-      gp->flags  ^= GAME_FLAG_PLAYER_INVINCIBLE;
+    if(IsKeyPressed(KEY_F7)) {
+      gp->debug_flags  ^= GAME_DEBUG_FLAG_PLAYER_INVINCIBLE;
     }
 
     int key = GetCharPressed();
@@ -318,6 +337,15 @@ void game_update_and_draw(Game *gp) {
   } /* input */
 
   { /* update */
+
+    if(gp->flags & GAME_FLAG_PAUSE) {
+      assert(gp->state != GAME_STATE_NONE && gp->state != GAME_STATE_TITLE_SCREEN && gp->state != GAME_STATE_GAME_OVER);
+      if(gp->player_input.pressed_any_key) {
+        gp->flags ^= GAME_FLAG_PAUSE;
+      } else {
+        goto update_end;
+      }
+    }
 
     if(gp->background_y_offset >= WINDOW_HEIGHT) {
       gp->background_y_offset = 0;
@@ -407,6 +435,7 @@ void game_update_and_draw(Game *gp) {
                 if(gp->wave_transition_post_delay_timer >= WAVE_TRANSITION_POST_DELAY_TIME) {
                   gp->wave_banner = entity_spawn(gp);
                   entity_init_wave_banner(gp, gp->wave_banner);
+                  PlaySound(gp->wave_banner_sound);
                 }
               }
 
@@ -424,7 +453,12 @@ void game_update_and_draw(Game *gp) {
 
             }
           } else {
-            gp->wave_transition_pre_delay_timer += gp->timestep;
+            if(gp->live_missiles == 0) {
+              gp->wave_transition_pre_delay_timer += gp->timestep;
+              if(gp->wave_transition_pre_delay_timer >= WAVE_TRANSITION_PRE_DELAY_TIME) {
+                PlaySound(gp->hyperspace_jump_sound);
+              }
+            }
           }
 
         } break;
@@ -535,6 +569,7 @@ void game_update_and_draw(Game *gp) {
     }
 
     gp->live_entities = 0;
+    gp->live_missiles = 0;
 
     for(Entity_order order = ENTITY_ORDER_FIRST; order < ENTITY_ORDER_MAX; order++) {
       for(s64 i = 0; i < MAX_ENTITIES; i++) {
@@ -545,6 +580,10 @@ void game_update_and_draw(Game *gp) {
         }
 
         gp->live_entities++;
+
+        if(ep->kind == ENTITY_KIND_MISSILE) {
+          gp->live_missiles++;
+        }
 
         { /* entity_update */
           switch(ep->control) {
@@ -576,6 +615,8 @@ void game_update_and_draw(Game *gp) {
                 }
 
                 if(ep->received_damage) {
+                  PlaySound(gp->player_damage_sound);
+
                   ep->received_damage = 0;
 
                   ep->flags |= ENTITY_FLAG_USE_DAMAGE_BLINK_TINT;
@@ -586,13 +627,14 @@ void game_update_and_draw(Game *gp) {
                   ep->damage_blink_sprite_tint = PLAYER_DAMAGE_BLINK_SPRITE_TINT;
                 }
 
-                if(gp->flags & GAME_FLAG_PLAYER_INVINCIBLE) {
+                if(gp->debug_flags & GAME_DEBUG_FLAG_PLAYER_INVINCIBLE) {
                   if(ep->health <= PLAYER_HEALTH) {
                     ep->health = PLAYER_HEALTH;
                   }
                 }
 
                 if(ep->health <= 0) {
+                  PlaySound(gp->player_die_sound);
                   entity_die(gp, ep);
                   goto entity_update_end;
                 }
@@ -600,6 +642,7 @@ void game_update_and_draw(Game *gp) {
               } break;
             case ENTITY_CONTROL_MISSILE:
               {
+
                 Rectangle ep_rec =
                 {
                   ep->pos.x - ep->half_size.x,
@@ -717,6 +760,7 @@ void game_update_and_draw(Game *gp) {
             case ENTITY_CONTROL_INVADER_IN_FORMATION:
               {
                 if(ep->health <= 0) {
+                  PlaySound(gp->invader_die_sound);
                   gp->score += 5;
                   entity_die(gp, ep);
                   goto entity_update_end;
@@ -780,6 +824,8 @@ void game_update_and_draw(Game *gp) {
                     ep->missile_launcher.initial_pos =
                       Vector2Add(ep->pos, (Vector2){ 0, -ep->missile_launcher.missile_size.y });
                     entity_init_missile_from_launcher(gp, missile, ep->missile_launcher);
+                    assert(missile->missile_sound);
+                    PlaySound(*missile->missile_sound);
                   }
                 }
 
@@ -799,13 +845,13 @@ void game_update_and_draw(Game *gp) {
             }
           }
 
-entity_update_end:
-          PASS; // apparently just placing a label somewhere isn't legal
+entity_update_end: NOOP; // apparently just placing a label somewhere isn't legal
         } /* entity_update */
 
       } /* update entities */
     }
 
+update_end: NOOP;
   } /* update */
 
   { /* draw */
@@ -883,13 +929,13 @@ entity_update_end:
 
       /* player health */
       if(gp->player && gp->player->live && gp->player->kind == ENTITY_KIND_PLAYER) {
-        const float scale = 0.65;
-        const float spacing = 16.0;
-        const float width = (float)gp->player_texture.width * scale + spacing;
+        const float scale = 0.60;
+        const float spacing = 5.0;
+        const float width = (float)gp->player_texture.width * scale + 1.5*spacing;
         Vector2 v =
         {
           (float)WINDOW_WIDTH - width,
-          (float)WINDOW_HEIGHT - (float)gp->player_texture.height * scale - spacing,
+          spacing,
         };
 
         for(int i = 0; i < gp->player->health; i++) {
@@ -912,21 +958,45 @@ entity_update_end:
         DrawText(game_over_banner, ((float)WINDOW_WIDTH - (float)w) * 0.5, (float)WINDOW_HEIGHT * 0.4, GAME_OVER_BANNER_FONT_SIZE, INVADER_MISSILE_COLOR);
       }
 
+      if(gp->flags & GAME_FLAG_PAUSE) {
+        DrawRectangleRec(WINDOW_RECT, (Color){ 0, 0, 0, 150 });
+
+        char *pause_banner = "PAUSED";
+        int pause_banner_w = MeasureText(pause_banner, PAUSE_BANNER_FONT_SIZE);
+
+        DrawText(pause_banner, ((float)WINDOW_WIDTH - (float)pause_banner_w) * 0.5, (float)WINDOW_HEIGHT * 0.4, PAUSE_BANNER_FONT_SIZE, PAUSE_BANNER_COLOR);
+
+        if(gp->resume_hint_blink_timer >= RESUME_HINT_BLINK_PERIOD) {
+          gp->resume_hint_blink_timer = 0;
+          gp->resume_hint_blink_high = !gp->resume_hint_blink_high;
+        } else {
+          gp->resume_hint_blink_timer += gp->timestep;
+        }
+
+        if(gp->resume_hint_blink_high) {
+          char *resume_hint_banner = "press any key to resume";
+          int resume_hint_banner_w = MeasureText(resume_hint_banner, RESUME_HINT_FONT_SIZE);
+
+          DrawText(resume_hint_banner, ((float)WINDOW_WIDTH - (float)resume_hint_banner_w) * 0.5, (float)WINDOW_HEIGHT * 0.56, RESUME_HINT_FONT_SIZE, RESUME_HINT_COLOR);
+        }
+
+      }
+
     } /* HUD and UI */
 
-    if(gp->flags & GAME_FLAG_DEBUG_UI) { /* debug overlay */
+    if(gp->debug_flags & GAME_DEBUG_FLAG_DEBUG_UI) { /* debug overlay */
       char *debug_text = game_frame_scratch_alloc(gp, 256);
       char *debug_text_fmt =
         "auto_hot_reload: %s\n"
         "player_is_invincible: %s\n"
-        "frame time: %.3f\n"
+        "frame time: %.7f\n"
         "live entities count: %li\n"
         "most entities allocated: %li\n"
         "game state: %s";
       stbsp_sprintf(debug_text,
           debug_text_fmt,
-          (gp->flags & GAME_FLAG_HOT_RELOAD) ? "on" : "off",
-          (gp->flags & GAME_FLAG_PLAYER_INVINCIBLE) ? "on" : "off",
+          (gp->debug_flags & GAME_DEBUG_FLAG_HOT_RELOAD) ? "on" : "off",
+          (gp->debug_flags & GAME_DEBUG_FLAG_PLAYER_INVINCIBLE) ? "on" : "off",
           gp->timestep,
           gp->live_entities,
           gp->entities_allocated,
