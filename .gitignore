@@ -9,3 +9,4 @@ invaders
 *.dSYM
 tags
 vgcore*
+aseprite/*

@@ -31,6 +31,8 @@ int main(void) {
     gp->player_texture = LoadTexture("sprites/ship.png");
     gp->invader_texture = LoadTexture("sprites/enemy.png");
 
+    gp->orange_explosion_anim = LoadTexture("sprites/orange_explosion.png");
+
     gp->player_missile_sound = LoadSound("sounds/missile_sound.wav");
     gp->invader_missile_sound = LoadSound("sounds/invader_missile.wav");
     gp->invader_die_sound = LoadSound("sounds/invader_damage.wav");
@@ -68,6 +70,7 @@ int main(void) {
     UnloadTexture(gp->background_texture);
     UnloadTexture(gp->player_texture);
     UnloadTexture(gp->invader_texture);
+    UnloadTexture(gp->orange_explosion_anim);
 
     UnloadSound(gp->player_missile_sound);
     UnloadSound(gp->invader_missile_sound);

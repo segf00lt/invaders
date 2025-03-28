@@ -8,6 +8,8 @@
 #include "arena.h"
 
 
+/* constants */
+
 #define TARGET_FPS 60
 
 #define WINDOW_WIDTH  1200
@@ -16,12 +18,13 @@
 #define WINDOW_RECT (Rectangle){0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}
 
 #define MAX_ENTITIES 2048
+#define MAX_PARTICLES 128
 
 #define MAX_SHOOTING_INVADERS_PER_FORMATION 3
 
 #define MAX_ENTITIES_PER_FORMATION 36
 
-#define BACKGROUND_SCROLL_SPEED ((float)400.0)
+#define BACKGROUND_SCROLL_SPEED ((float)200.0)
 
 #define FRICTION ((float)40.0)
 
@@ -60,7 +63,7 @@
 #define WAVE_TRANSITION_PRE_DELAY_TIME ((float)0.6f)
 #define WAVE_TRANSITION_POST_DELAY_TIME ((float)0.3f)
 #define WAVE_TRANSITION_RAMP_TIME ((float)2.2f)
-#define WAVE_TRANSITION_RAMP_ACCEL ((float)420.0f)
+#define WAVE_TRANSITION_RAMP_ACCEL ((float)520.0f)
 #define WAVE_TRANSITION_BANNER_TIME ((float)2.0f)
 
 #define WAVE_BANNER_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 0.4 }
@@ -100,7 +103,12 @@
 #define RESUME_HINT_COLOR (Color){ 245, 245, 245, 205 }
 #define RESUME_HINT_BLINK_PERIOD ((float)0.66)
 
+
+
+/* macros */
+
 #define ENTITY_KIND_IN_MASK(kind, mask) (!!(mask & (1ull<<kind)))
+
 
 /* tables */
 #define GAME_STATES     \
@@ -137,6 +145,7 @@
   X(COLLIDE)                 \
   X(CLAMP_POS_TO_SCREEN)     \
   X(HAS_MISSILE_LAUNCHER)    \
+  X(HAS_PARTICLE_EMITTER)    \
   X(BLINK_TEXT)              \
   X(DRAW_TEXT)               \
   X(DRAW_SPRITE)             \
@@ -151,12 +160,20 @@
   X(INVADER_IN_FORMATION)          \
   X(MISSILE)                       \
 
+#define PARTICLE_FLAGS            \
+  X(HAS_SPRITE_ANIM)              \
+  X(DIE_WHEN_ANIM_FINISH)         \
+  X(MULTIPLE_ANIM_CYCLES)         \
+
 
 /* type definitions */
 typedef struct Game Game;
 typedef struct Player_input Player_input;
 typedef struct Entity Entity;
 typedef struct Missile_launcher Missile_launcher;
+typedef struct Particle_emitter Particle_emitter;
+typedef struct Particle Particle;
+typedef u64 Particle_flags;
 typedef u64 Game_flags;
 typedef u64 Game_debug_flags;
 typedef u64 Entity_flags;
@@ -247,11 +264,26 @@ ENTITY_FLAGS
 
 STATIC_ASSERT(ENTITY_FLAG_INDEX_MAX < 64, number_of_entity_flags_is_less_then_64);
 
+typedef enum Particle_flag_index {
+  PARTICLE_FLAG_INDEX_INVALID = -1,
+#define X(flag) PARTICLE_FLAG_INDEX_##flag,
+  PARTICLE_FLAGS
+#undef X
+    PARTICLE_FLAG_INDEX_MAX,
+} Particle_flag_index;
+
+#define X(flag) const Particle_flags PARTICLE_FLAG_##flag = (Particle_flags)(1ull<<PARTICLE_FLAG_INDEX_##flag);
+PARTICLE_FLAGS
+#undef X
+
+STATIC_ASSERT(PARTICLE_FLAG_INDEX_MAX < 64, number_of_particle_flags_is_less_then_64);
+
 
 /* struct bodies */
 
 struct Missile_launcher {
   Vector2 initial_pos;
+  Vector2 spawn_offset;
   Vector2 initial_vel;
   Vector2 missile_size;
   Color   missile_color;
@@ -264,6 +296,32 @@ struct Missile_launcher {
   u32     shooting;
   float   cooldown_period;
   float   cooldown_timer;
+};
+
+struct Particle {
+  u32 live;
+
+  Particle_flags flags;
+
+  Vector2 pos;
+  Vector2 vel;
+  Vector2 half_size;
+
+  Texture2D sprite;
+  Color     sprite_tint;
+  float     sprite_scale;
+
+  Rectangle frame_rec;
+  int       total_frames;
+  int       frame_counter;
+  int       frame_speed;
+  int       cur_frame;
+};
+
+struct Particle_emitter {
+  int emit_count;
+
+  Particle particle;
 };
 
 struct Entity {
@@ -299,6 +357,8 @@ struct Entity {
 
   int health;
   int received_damage;
+
+  Particle_emitter particle_emitter;
 
   Texture2D sprite;
   Color     sprite_tint;
@@ -350,6 +410,9 @@ struct Game {
   s64     entities_allocated;
   Entity *entity_free_list;
 
+  Particle  particles[MAX_PARTICLES];
+  s64       particles_buf_pos;
+
   s64 live_entities;
 
   s64 live_missiles;
@@ -378,6 +441,8 @@ struct Game {
   Texture2D background_texture;
   Texture2D player_texture;
   Texture2D invader_texture;
+
+  Texture2D orange_explosion_anim;
 
   Sound invader_missile_sound;
   Sound player_missile_sound;
@@ -423,5 +488,7 @@ void entity_init_wave_banner(Game *gp, Entity *ep);
 void entity_init_enemy_formation(Game *gp, Entity *ep);
 void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Vector2 initial_pos);
 void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher launcher);
+
+void particle_emit(Game *gp, Particle_emitter emitter);
 
 #endif
