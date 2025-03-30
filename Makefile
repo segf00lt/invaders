@@ -6,12 +6,12 @@ LDFLAGS = -lraylib -lm
 
 UNAME_S = $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-	RAYLIB_HEADER_PATTERN = /opt/homebrew/include/ray*
+	RAYLIB_HEADER_PATTERN = /opt/homebrew/include/ray* /opt/homebrew/include/rlgl.h
 	GAME_MODULE = invaders.dylib
 	SHARED = -dynamiclib
 	FLAGS += -L'/opt/homebrew/lib/' -I'/opt/homebrew/include/' -Wno-format
 else
-	RAYLIB_HEADER_PATTERN = /usr/local/include/ray*
+	RAYLIB_HEADER_PATTERN = /usr/local/include/ray* /usr/local/include/rlgl.h
 	GAME_MODULE = invaders.so
 	SHARED = -shared
 	FLAGS += -L'/usr/local/lib/' -I'/usr/local/include/'

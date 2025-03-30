@@ -3,6 +3,7 @@
 
 #include <raylib.h>
 #include <raymath.h>
+#include <rlgl.h>
 #include "basic.h"
 #include "stb_sprintf.h"
 #include "arena.h"
@@ -13,7 +14,7 @@
 #define TARGET_FPS 60
 
 #define WINDOW_WIDTH  1200
-#define WINDOW_HEIGHT 1000
+#define WINDOW_HEIGHT 900
 
 #define WINDOW_RECT (Rectangle){0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}
 
@@ -41,8 +42,8 @@
 #define TITLE_HINT_COLOR (Color){ 245, 245, 245, 205 }
 #define TITLE_HINT_BLINK_PERIOD ((float)0.66)
 
-#define PLAYER_INITIAL_OFFSCREEN_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT + 220.0f }
-#define PLAYER_MAIN_Y ((float)WINDOW_HEIGHT - 150.0f)
+#define PLAYER_INITIAL_OFFSCREEN_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 1.3f }
+#define PLAYER_MAIN_Y ((float)WINDOW_HEIGHT * 0.87f)
 #define PLAYER_ENTER_VIEW_SPEED ((float)400)
 #define PLAYER_ACCEL ((float)1.5e4)
 
@@ -74,7 +75,7 @@
 #define ENEMY_FORMATION_ROWS 3
 #define ENEMY_FORMATION_COLS 7
 #define ENEMY_FORMATION_SPACING (Vector2){ 50.0f, 25.0f }
-#define ENEMY_FORMATION_INITIAL_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * -0.4 }
+#define ENEMY_FORMATION_INITIAL_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * -0.35 }
 #define ENEMY_FORMATION_MAIN_Y ((float)WINDOW_HEIGHT * 0.16)
 #define ENEMY_FORMATION_STRAFE_VEL_X ((float)150.0f)
 #define ENEMY_FORMATION_ENTER_LEVEL_SPEED ((float)300)
@@ -439,6 +440,8 @@ struct Game {
   u64 current_formation_id;
 
   Font font;
+
+  RenderTexture2D render_texture;
 
   int wave_counter;
 

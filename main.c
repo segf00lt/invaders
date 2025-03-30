@@ -13,6 +13,7 @@ typedef void (*Game_update_and_draw_proc)(Game *);
 
 
 int main(void) {
+  SetConfigFlags(FLAG_WINDOW_RESIZABLE);
   InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "invaders 3");
   InitAudioDevice();
 
@@ -45,6 +46,8 @@ int main(void) {
     gp->wave_banner_sound = LoadSound("sounds/wave_banner.wav");
     gp->hyperspace_jump_sound = LoadSound("sounds/hyperspace_jump.wav");
 
+    gp->render_texture = LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT);
+
     gp->debug_flags |= GAME_DEBUG_FLAG_HOT_RELOAD;
   } /* init game */
 
@@ -71,6 +74,8 @@ int main(void) {
   }
 
   { /* deinit game */
+    UnloadRenderTexture(gp->render_texture);
+
     UnloadTexture(gp->background_texture);
     UnloadTexture(gp->player_texture);
     UnloadTexture(gp->invader_texture);

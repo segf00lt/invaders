@@ -180,6 +180,7 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Ve
     ENTITY_FLAG_DRAW_SPRITE |
     ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE |
     ENTITY_FLAG_HAS_MISSILE_LAUNCHER |
+    //ENTITY_FLAG_DRAW_BOUNDS |
     0;
 
   ep->control = ENTITY_CONTROL_INVADER_IN_FORMATION;
@@ -229,6 +230,8 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Ve
   ep->sprite = gp->invader_texture;
   ep->sprite_tint = WHITE;
   ep->sprite_scale = 1.0;
+
+  ep->bounds_color = GREEN;
 
   ep->half_size =
     (Vector2){ (float)ep->sprite.width * 0.5, (float)ep->sprite.height * 0.5 };
@@ -366,6 +369,10 @@ void game_update_and_draw(Game *gp) {
 
     if(IsKeyPressed(KEY_F11)) {
       gp->debug_flags  ^= GAME_DEBUG_FLAG_DEBUG_UI;
+    }
+
+    if(IsKeyPressed(KEY_F10)) {
+      ToggleBorderlessWindowed();
     }
 
     if(IsKeyPressed(KEY_F7)) {
@@ -967,7 +974,7 @@ update_end:;
   } /* update */
 
   { /* draw */
-    BeginDrawing();
+    BeginTextureMode(gp->render_texture);
 
     ClearBackground(BLACK);
 
@@ -975,7 +982,7 @@ update_end:;
         gp->background_texture,
         (Rectangle){ 0, gp->background_y_offset, WINDOW_WIDTH, WINDOW_HEIGHT },
         (Vector2){0},
-        (Color){255, 255, 255, 160});
+        (Color){255, 255, 255, 255});
 
     for(Entity_order order = ENTITY_ORDER_FIRST; order < ENTITY_ORDER_MAX; order++) {
       for(s64 i = 0; i < MAX_ENTITIES; i++) {
@@ -1121,6 +1128,24 @@ update_end:;
 
     } /* HUD and UI */
 
+    EndTextureMode();
+
+    float scale = fminf((float)GetScreenWidth() / WINDOW_WIDTH,
+        (float)GetScreenHeight() / WINDOW_HEIGHT);
+    int offset_x = (GetScreenWidth() - (int)(WINDOW_WIDTH * scale)) >> 1;
+    int offset_y = (GetScreenHeight() - (int)(WINDOW_HEIGHT * scale)) >> 1;
+
+    BeginDrawing();
+    ClearBackground(DARKBLUE);
+    {
+      Rectangle dest = { (float)offset_x, (float)offset_y, WINDOW_WIDTH * scale, WINDOW_HEIGHT * scale };
+      DrawRectangleRec(dest, BLACK);
+      DrawTexturePro(gp->render_texture.texture,
+          (Rectangle){ 0, 0, (float)gp->render_texture.texture.width, -(float)gp->render_texture.texture.height },
+          dest,
+          (Vector2){ 0, 0 }, 0.0f, WHITE);
+    }
+
     if(gp->debug_flags & GAME_DEBUG_FLAG_DEBUG_UI) { /* debug overlay */
       char *debug_text = game_frame_scratch_alloc(gp, 256);
       char *debug_text_fmt =
@@ -1130,6 +1155,8 @@ update_end:;
         "live entities count: %li\n"
         "most entities allocated: %li\n"
         "particle_buf_pos: %i\n"
+        "screen width: %i\n"
+        "screen height: %i\n"
         "game state: %s";
       stbsp_sprintf(debug_text,
           debug_text_fmt,
@@ -1139,12 +1166,15 @@ update_end:;
           gp->live_entities,
           gp->entities_allocated,
           gp->particles_buf_pos,
+          GetScreenWidth(),
+          GetScreenHeight(),
           Game_state_strings[gp->state]);
-      Vector2 debug_text_size = MeasureTextEx(gp->font, debug_text, 22, 1.0);
-      DrawText(debug_text, 10, WINDOW_HEIGHT - debug_text_size.y - 10, 20, GREEN);
+      Vector2 debug_text_size = MeasureTextEx(gp->font, debug_text, 18, 1.0);
+      DrawText(debug_text, 10, GetScreenHeight() - debug_text_size.y - 10, 18, GREEN);
     } /* debug overlay */
 
     EndDrawing();
+
   } /* draw */
 
   gp->state = gp->next_state;
