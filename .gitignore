@@ -3,6 +3,7 @@
 *.a
 *.o
 a.out
+*.dylib
 invaders
 .DS_Store
 .vscode

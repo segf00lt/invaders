@@ -57,7 +57,7 @@
 #define PLAYER_MISSILE_SIZE (Vector2){ 6, 20 }
 #define PLAYER_MISSILE_SPAWN_OFFSET (Vector2){ 0, -PLAYER_MISSILE_SIZE.y }
 #define PLAYER_MISSILE_VELOCITY (Vector2){ 0, -1300 }
-#define PLAYER_MISSILE_DAMAGE_MASK (Entity_kind_mask)(ENTITY_KIND_MASK_INVADER | 0)
+#define PLAYER_MISSILE_COLLISION_MASK (Entity_kind_mask)(ENTITY_KIND_MASK_INVADER | 0)
 #define PLAYER_MISSILE_DAMAGE 1
 
 #define WAVE_TRANSITION_PRE_DELAY_TIME ((float)0.6f)
@@ -87,7 +87,7 @@
 #define INVADER_MISSILE_COLOR (Color){ 0, 216, 70, 255 }
 #define INVADER_MISSILE_SPAWN_OFFSET (Vector2){ 0, INVADER_MISSILE_SIZE.y }
 #define INVADER_MISSILE_VELOCITY (Vector2){ 0, 900 }
-#define INVADER_MISSILE_DAMAGE_MASK (Entity_kind_mask)(ENTITY_KIND_MASK_PLAYER | 0)
+#define INVADER_MISSILE_COLLISION_MASK (Entity_kind_mask)(ENTITY_KIND_MASK_PLAYER | 0)
 #define INVADER_MISSILE_DAMAGE 1
 #define INVADER_HEALTH 1
 
@@ -139,19 +139,24 @@
   X(FIRST)              \
   X(LAST)               \
 
-#define ENTITY_FLAGS         \
-  X(DYNAMICS)                \
-  X(APPLY_FRICTION)          \
-  X(COLLIDE)                 \
-  X(CLAMP_POS_TO_SCREEN)     \
-  X(HAS_MISSILE_LAUNCHER)    \
-  X(HAS_PARTICLE_EMITTER)    \
-  X(BLINK_TEXT)              \
-  X(DRAW_TEXT)               \
-  X(DRAW_SPRITE)             \
-  X(USE_DAMAGE_BLINK_TINT)   \
-  X(DRAW_BOUNDS)             \
-  X(FILL_BOUNDS)             \
+// TODO find a use for APPLY_COLLISION
+#define ENTITY_FLAGS                 \
+  X(DYNAMICS)                        \
+  X(APPLY_FRICTION)                  \
+  X(APPLY_COLLISION)                 \
+  X(RECEIVE_COLLISION)               \
+  X(DIE_ON_APPLY_COLLISION)          \
+  X(CLAMP_POS_TO_SCREEN)             \
+  X(HAS_MISSILE_LAUNCHER)            \
+  X(HAS_PARTICLE_EMITTER)            \
+  X(APPLY_COLLISION_DAMAGE)          \
+  X(RECEIVE_COLLISION_DAMAGE)        \
+  X(BLINK_TEXT)                      \
+  X(DRAW_TEXT)                       \
+  X(DRAW_SPRITE)                     \
+  X(USE_DAMAGE_BLINK_TINT)           \
+  X(DRAW_BOUNDS)                     \
+  X(FILL_BOUNDS)                     \
 
 #define ENTITY_CONTROLS            \
   X(PLAYER)                        \
@@ -290,7 +295,7 @@ struct Missile_launcher {
 
   Sound *missile_sound;
 
-  Entity_kind_mask damage_mask;
+  Entity_kind_mask collision_mask;
   int              damage_amount;
 
   u32     shooting;
@@ -348,7 +353,8 @@ struct Entity {
 
   Missile_launcher missile_launcher;
 
-  Entity_kind_mask damage_mask;
+  Entity_kind_mask collision_mask;
+
   int              damage_amount;
 
   Sound *missile_sound;

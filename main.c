@@ -2,7 +2,11 @@
 #include <dlfcn.h>
 
 
+#ifdef __MACH__
+#define INVADERS_MODULE_PATH "./invaders.dylib"
+#else
 #define INVADERS_MODULE_PATH "./invaders.so"
+#endif
 
 
 typedef void (*Game_update_and_draw_proc)(Game *);

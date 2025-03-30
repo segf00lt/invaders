@@ -85,9 +85,10 @@ void entity_init_player(Game *gp, Entity *ep) {
 
   ep->flags =
     ENTITY_FLAG_DYNAMICS |
-    ENTITY_FLAG_COLLIDE |
+    ENTITY_FLAG_RECEIVE_COLLISION |
     ENTITY_FLAG_APPLY_FRICTION |
     ENTITY_FLAG_DRAW_SPRITE |
+    ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE |
     ENTITY_FLAG_HAS_MISSILE_LAUNCHER |
     //ENTITY_FLAG_DRAW_BOUNDS |
     0;
@@ -104,7 +105,7 @@ void entity_init_player(Game *gp, Entity *ep) {
     .initial_vel = PLAYER_MISSILE_VELOCITY,
     .missile_size = PLAYER_MISSILE_SIZE,
     .missile_color = PLAYER_MISSILE_COLOR,
-    .damage_mask = PLAYER_MISSILE_DAMAGE_MASK,
+    .collision_mask = PLAYER_MISSILE_COLLISION_MASK,
     .damage_amount = PLAYER_MISSILE_DAMAGE,
     .missile_sound = &gp->player_missile_sound,
   };
@@ -175,8 +176,9 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Ve
 
   ep->flags =
     ENTITY_FLAG_DYNAMICS |
-    ENTITY_FLAG_COLLIDE |
+    ENTITY_FLAG_RECEIVE_COLLISION |
     ENTITY_FLAG_DRAW_SPRITE |
+    ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE |
     ENTITY_FLAG_HAS_MISSILE_LAUNCHER |
     0;
 
@@ -194,7 +196,7 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Ve
       .initial_vel = INVADER_MISSILE_VELOCITY,
       .missile_size = INVADER_MISSILE_SIZE,
       .missile_color = INVADER_MISSILE_COLOR,
-      .damage_mask = INVADER_MISSILE_DAMAGE_MASK,
+      .collision_mask = INVADER_MISSILE_COLLISION_MASK,
       .damage_amount = INVADER_MISSILE_DAMAGE,
       .missile_sound = &gp->invader_missile_sound,
     };
@@ -237,7 +239,9 @@ void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher la
 
   ep->flags =
     ENTITY_FLAG_DYNAMICS |
-    ENTITY_FLAG_COLLIDE |
+    ENTITY_FLAG_APPLY_COLLISION |
+    ENTITY_FLAG_APPLY_COLLISION_DAMAGE |
+    ENTITY_FLAG_DIE_ON_APPLY_COLLISION |
     ENTITY_FLAG_FILL_BOUNDS |
     0;
 
@@ -246,7 +250,7 @@ void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher la
   ep->update_order = ENTITY_ORDER_FIRST;
   ep->draw_order = ENTITY_ORDER_LAST;
 
-  ep->damage_mask = launcher.damage_mask;
+  ep->collision_mask = launcher.collision_mask;
   ep->damage_amount = launcher.damage_amount;
 
   ep->missile_sound = launcher.missile_sound;
@@ -625,6 +629,10 @@ void game_update_and_draw(Game *gp) {
         }
 
         { /* entity_update */
+          Entity *colliding_entities[MAX_ENTITIES];
+          int colliding_entities_count = 0;
+          bool applied_collision = false;
+
           switch(ep->control) {
             default:
               UNREACHABLE;
@@ -653,17 +661,20 @@ void game_update_and_draw(Game *gp) {
                   ep->vel.x = 0;
                 }
 
-                if(ep->received_damage) {
+                if(ep->received_damage > 0) {
+
                   PlaySound(gp->player_damage_sound);
 
-                  ep->received_damage = 0;
-
-                  ep->flags |= ENTITY_FLAG_USE_DAMAGE_BLINK_TINT;
-                  ep->damage_blink_high = 1;
-                  ep->damage_blink_period = PLAYER_DAMAGE_BLINK_PERIOD;
-                  ep->damage_blink_timer = 0;
-                  ep->damage_blink_total_time = PLAYER_DAMAGE_BLINK_TOTAL_TIME;
-                  ep->damage_blink_sprite_tint = PLAYER_DAMAGE_BLINK_SPRITE_TINT;
+                  if(ep->damage_blink_total_time > 0) {
+                    ep->received_damage = 0;
+                  } else {
+                    ep->flags |= ENTITY_FLAG_USE_DAMAGE_BLINK_TINT;
+                    ep->damage_blink_high = 1;
+                    ep->damage_blink_period = PLAYER_DAMAGE_BLINK_PERIOD;
+                    ep->damage_blink_timer = 0;
+                    ep->damage_blink_total_time = PLAYER_DAMAGE_BLINK_TOTAL_TIME;
+                    ep->damage_blink_sprite_tint = PLAYER_DAMAGE_BLINK_SPRITE_TINT;
+                  }
                 }
 
                 if(gp->debug_flags & GAME_DEBUG_FLAG_PLAYER_INVINCIBLE) {
@@ -693,37 +704,6 @@ void game_update_and_draw(Game *gp) {
                 if(!CheckCollisionRecs(WINDOW_RECT, ep_rec)) {
                   entity_die(gp, ep);
                   goto entity_update_end;
-                }
-
-                for(int i = 0; i < MAX_ENTITIES; i++) {
-                  Entity *colliding_entity = &gp->entities[i];
-
-                  if(colliding_entity->live && ENTITY_KIND_IN_MASK(colliding_entity->kind, ep->damage_mask)) {
-                    Rectangle ep_rec =
-                    {
-                      ep->pos.x - ep->half_size.x,
-                      ep->pos.y - ep->half_size.y,
-                      2 * ep->half_size.x,
-                      2 * ep->half_size.y,
-                    };
-
-                    Rectangle colliding_entity_rec =
-                    {
-                      colliding_entity->pos.x - colliding_entity->half_size.x,
-                      colliding_entity->pos.y - colliding_entity->half_size.y,
-                      2 * colliding_entity->half_size.x,
-                      2 * colliding_entity->half_size.y,
-                    };
-
-                    if(CheckCollisionRecs(ep_rec, colliding_entity_rec)) {
-                      colliding_entity->health -= ep->damage_amount;
-                      colliding_entity->received_damage = 1;
-                      entity_die(gp, ep);
-                      goto entity_update_end;
-                    }
-
-                  }
-
                 }
 
               } break;
@@ -853,6 +833,60 @@ void game_update_and_draw(Game *gp) {
             Vector2 pos_max =
               Vector2Subtract((Vector2){ WINDOW_WIDTH, WINDOW_HEIGHT }, ep->half_size);
             ep->pos = Vector2Clamp(ep->pos, pos_min, pos_max);
+          }
+
+          if(ep->flags & ENTITY_FLAG_APPLY_COLLISION) {
+            Rectangle ep_rec =
+            {
+              ep->pos.x - ep->half_size.x,
+              ep->pos.y - ep->half_size.y,
+              2 * ep->half_size.x,
+              2 * ep->half_size.y,
+            };
+
+            for(int i = 0; i < MAX_ENTITIES; i++) {
+              Entity *colliding_entity = &gp->entities[i];
+
+              if(colliding_entity->live && colliding_entity->flags & ENTITY_FLAG_RECEIVE_COLLISION) {
+                Rectangle colliding_entity_rec =
+                {
+                  colliding_entity->pos.x - colliding_entity->half_size.x,
+                  colliding_entity->pos.y - colliding_entity->half_size.y,
+                  2 * colliding_entity->half_size.x,
+                  2 * colliding_entity->half_size.y,
+                };
+
+                if(CheckCollisionRecs(ep_rec, colliding_entity_rec)) {
+                  if(ENTITY_KIND_IN_MASK(colliding_entity->kind, ep->collision_mask)) {
+                    applied_collision = true;
+                    colliding_entities[colliding_entities_count++] = colliding_entity;
+                  }
+                }
+
+              }
+
+            }
+
+          }
+
+          if(ep->flags & ENTITY_FLAG_APPLY_COLLISION_DAMAGE) {
+            for(int i = 0; i < colliding_entities_count; i++) {
+              colliding_entities[i]->received_damage = ep->damage_amount;
+            }
+          }
+
+          if(ep->flags & ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE) {
+            if(ep->received_damage > 0) {
+              ep->health -= ep->received_damage;
+              ep->received_damage = 0;
+            }
+          }
+
+          if(ep->flags & ENTITY_FLAG_DIE_ON_APPLY_COLLISION) {
+            if(applied_collision) {
+              entity_die(gp, ep);
+              goto entity_update_end;
+            }
           }
 
           if(ep->flags & ENTITY_FLAG_HAS_MISSILE_LAUNCHER) {
