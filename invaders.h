@@ -47,9 +47,15 @@
 #define PLAYER_ENTER_VIEW_SPEED ((float)400)
 #define PLAYER_ACCEL ((float)1.5e4)
 
+#define PLAYER_BOUNDS_SIZE (Vector2){ 40, 50 }
+#define PLAYER_SPRITE_FRAME_REC (Rectangle){ 0, 0, 32, 32 }
+#define PLAYER_SPRITE_SCALE ((float)2.0f)
+#define PLAYER_SPRITE_TOTAL_FRAMES 3
+#define PLAYER_SPRITE_FRAME_SPEED 8
+
 #define PLAYER_DAMAGE_BLINK_PERIOD ((float)0.03f)
 #define PLAYER_DAMAGE_BLINK_TOTAL_TIME ((float)1.2f)
-#define PLAYER_DAMAGE_BLINK_SPRITE_TINT (Color){ 170, 0, 0, 255 }
+#define PLAYER_DAMAGE_BLINK_SPRITE_TINT (Color){ 255, 0, 0, 255 }
 
 #define PLAYER_MISSILE_LAUNCHER_COOLDOWN ((float)0.32)
 #define PLAYER_HEALTH 4
@@ -60,6 +66,10 @@
 #define PLAYER_MISSILE_VELOCITY (Vector2){ 0, -1300 }
 #define PLAYER_MISSILE_COLLISION_MASK (Entity_kind_mask)(ENTITY_KIND_MASK_INVADER | 0)
 #define PLAYER_MISSILE_DAMAGE 1
+#define PLAYER_MISSILE_SPRITE_SCALE ((float)3.2f)
+#define PLAYER_MISSILE_SPRITE_FRAME_REC (Rectangle){ 0, 0, 32, 32 }
+#define PLAYER_MISSILE_SPRITE_TOTAL_FRAMES 3
+#define PLAYER_MISSILE_SPRITE_FRAME_SPEED 20
 
 #define WAVE_TRANSITION_PRE_DELAY_TIME ((float)0.6f)
 #define WAVE_TRANSITION_POST_DELAY_TIME ((float)0.3f)
@@ -91,6 +101,10 @@
 #define INVADER_MISSILE_COLLISION_MASK (Entity_kind_mask)(ENTITY_KIND_MASK_PLAYER | 0)
 #define INVADER_MISSILE_DAMAGE 1
 #define INVADER_HEALTH 1
+#define INVADER_MISSILE_SPRITE_SCALE ((float)2.2f)
+#define INVADER_MISSILE_SPRITE_FRAME_REC (Rectangle){ 0, 0, 32, 32 }
+#define INVADER_MISSILE_SPRITE_TOTAL_FRAMES 3
+#define INVADER_MISSILE_SPRITE_FRAME_SPEED 20
 
 #define SCORE_LABEL_FONT_SIZE ((float)30.0f)
 
@@ -108,23 +122,27 @@
 
 /* macros */
 
-#define ENTITY_KIND_IN_MASK(kind, mask) (!!(mask & (1ull<<kind)))
+#define EntityKindInMask(kind, mask) (!!(mask & (1ull<<kind)))
 
 
 /* tables */
-#define GAME_STATES     \
-  X(NONE)               \
-  X(TITLE_SCREEN)       \
-  X(SPAWN_PLAYER)       \
-  X(WAVE_TRANSITION)    \
-  X(SPAWN_ENEMIES)      \
-  X(MAIN_LOOP)          \
-  X(GAME_OVER)          \
+
+#define GAME_STATES             \
+  X(NONE)                       \
+  X(TITLE_SCREEN)               \
+  X(SPAWN_PLAYER)               \
+  X(WAVE_TRANSITION)            \
+  X(SPAWN_ENEMIES)              \
+  X(MAIN_LOOP)                  \
+  X(GAME_OVER)                  \
+  X(DEBUG_SANDBOX)              \
 
 #define GAME_DEBUG_FLAGS     \
   X(DEBUG_UI)                \
   X(HOT_RELOAD)              \
   X(PLAYER_INVINCIBLE)       \
+  X(DRAW_ALL_ENTITY_BOUNDS)  \
+  X(SANDBOX_LOADED)          \
 
 #define GAME_FLAGS      \
   X(PAUSE)              \
@@ -150,11 +168,15 @@
   X(CLAMP_POS_TO_SCREEN)             \
   X(HAS_MISSILE_LAUNCHER)            \
   X(HAS_PARTICLE_EMITTER)            \
+  X(DO_MOVE_ANIMATION)               \
   X(APPLY_COLLISION_DAMAGE)          \
   X(RECEIVE_COLLISION_DAMAGE)        \
+  X(ANIMATE_SPRITE)                  \
   X(BLINK_TEXT)                      \
   X(DRAW_TEXT)                       \
+  X(FLIP_SPRITE)                     \
   X(DRAW_SPRITE)                     \
+  X(DRAW_FRAMED_SPRITE)              \
   X(USE_DAMAGE_BLINK_TINT)           \
   X(DRAW_BOUNDS)                     \
   X(FILL_BOUNDS)                     \
@@ -171,19 +193,35 @@
   X(DIE_WHEN_ANIM_FINISH)         \
   X(MULTIPLE_ANIM_CYCLES)         \
 
+#define ANIM_TAGS                 \
+  X(NONE)                         \
+
+#define ANIM_FRAME_TAGS           \
+  X(NONE)                         \
+
+#define ANIM_PLAYER_FLAGS         \
+  X(REVERSED)                     \
+  X(CYCLE)                        \
+
 
 /* type definitions */
+
 typedef struct Game Game;
 typedef struct Player_input Player_input;
 typedef struct Entity Entity;
 typedef struct Missile_launcher Missile_launcher;
 typedef struct Particle_emitter Particle_emitter;
 typedef struct Particle Particle;
-typedef u64 Particle_flags;
-typedef u64 Game_flags;
-typedef u64 Game_debug_flags;
-typedef u64 Entity_flags;
-typedef u64 Entity_kind_mask;
+typedef struct Sprite Sprite;
+typedef struct Anim_frame Anim_frame;
+typedef struct Anim Anim;
+typedef struct Anim_player Anim_player;
+typedef U64 Particle_flags;
+typedef U64 Game_flags;
+typedef U64 Game_debug_flags;
+typedef U64 Entity_flags;
+typedef U64 Entity_kind_mask;
+typedef U64 Anim_player_flags;
 
 typedef enum Game_state {
 #define X(state) GAME_STATE_##state,
@@ -284,28 +322,102 @@ PARTICLE_FLAGS
 
 STATIC_ASSERT(PARTICLE_FLAG_INDEX_MAX < 64, number_of_particle_flags_is_less_then_64);
 
+typedef enum Anim_tag {
+  ANIM_TAG_INVALID = -1,
+#define X(tag) ANIM_TAG_##tag,
+  ANIM_TAGS
+#undef X
+    ANIM_TAG_MAX,
+} Anim_tag;
+
+typedef enum Anim_frame_tag {
+  ANIM_FRAME_TAG_INVALID = -1,
+#define X(tag) ANIM_FRAME_TAG_##tag,
+  ANIM_FRAME_TAGS
+#undef X
+    ANIM_FRAME_TAG_MAX,
+} Anim_frame_tag;
+
+typedef enum Anim_player_flag_index {
+  ANIM_PLAYER_FLAG_INDEX_INVALID = -1,
+#define X(flag) ANIM_PLAYER_FLAG_INDEX_##flag,
+  ANIM_PLAYER_FLAGS
+#undef X
+    ANIM_PLAYER_FLAG_INDEX_MAX,
+} Anim_player_flag_index;
+
+#define X(flag) const Anim_player_flags ANIM_PLAYER_FLAG_##flag = (Anim_player_flags)(1ull<<ANIM_PLAYER_FLAG_INDEX_##flag);
+ANIM_PLAYER_FLAGS
+#undef X
+
+STATIC_ASSERT(ANIM_PLAYER_FLAG_INDEX_MAX < 64, number_of_anim_player_flags_is_less_then_64);
+
 
 /* struct bodies */
 
+struct Sprite {
+  int texture_index;
+  int x;
+  int y;
+  int w;
+  int h;
+};
+
+struct Anim_frame {
+  Anim_frame_tag tag;
+  int sprite_index;
+};
+
+struct Anim {
+  Anim_tag tag;
+
+  Anim_frame *frames;
+
+  int  total_frames;
+  int  fps;
+};
+
+struct Anim_player {
+  Anim_player_flags flags;
+
+  Anim cur_anim;
+  int  cur_frame;
+  int  frame_counter;
+
+  Sprite *dest_sprite;
+};
+
 struct Missile_launcher {
+  Entity_flags missile_entity_flags;
+
   Vector2 initial_pos;
   Vector2 spawn_offset;
   Vector2 initial_vel;
   Vector2 missile_size;
+
   Color   missile_color;
+
+  Texture2D sprite;
+  Color     sprite_tint;
+  float     sprite_scale;
+  Rectangle sprite_frame_rec;
+  int       total_frames;
+  int       frame_counter;
+  int       frame_speed;
+  int       cur_frame;
 
   Sound *missile_sound;
 
   Entity_kind_mask collision_mask;
   int              damage_amount;
 
-  u32     shooting;
+  U32     shooting;
   float   cooldown_period;
   float   cooldown_timer;
 };
 
 struct Particle {
-  u32 live;
+  U32 live;
 
   Particle_flags flags;
 
@@ -331,7 +443,7 @@ struct Particle_emitter {
 };
 
 struct Entity {
-  u32 live;
+  U32 live;
 
   Entity_kind    kind;
   Entity_order   update_order;
@@ -339,7 +451,7 @@ struct Entity {
   Entity_control control;
   Entity_flags   flags;
 
-  u64 genid;
+  U64 genid;
 
   Vector2 accel;
   Vector2 vel;
@@ -350,7 +462,7 @@ struct Entity {
   Color fill_color;
 
   Vector2 formation_slot_size;
-  u64     formation_id;
+  U64     formation_id;
 
   Missile_launcher missile_launcher;
 
@@ -370,6 +482,12 @@ struct Entity {
   Texture2D sprite;
   Color     sprite_tint;
   float     sprite_scale;
+  Rectangle sprite_frame_rec;
+
+  int       total_frames;
+  int       frame_counter;
+  int       frame_speed;
+  int       cur_frame;
 
   float damage_blink_timer;
   float damage_blink_period;
@@ -407,24 +525,27 @@ struct Game {
   Game_flags       flags;
   Game_debug_flags debug_flags;
 
-  u64 frame_index;
+  U64 frame_index;
 
   Arena frame_scratch;
 
   char wave_banner_buf[256];
 
   Entity  entities[MAX_ENTITIES];
-  s64     entities_allocated;
+  S64     entities_allocated;
   Entity *entity_free_list;
 
-  Particle  particles[MAX_PARTICLES];
-  s64       particles_buf_pos;
+  S64     save_entities_allocated;
+  Entity *save_entity_free_list;
 
-  s64 live_entities;
+  Particle particles[MAX_PARTICLES];
+  S64      particles_buf_pos;
 
-  s64 live_missiles;
+  S64 live_entities;
 
-  s64 score;
+  S64 live_missiles;
+
+  S64 score;
 
   Player_input player_input;
 
@@ -433,11 +554,11 @@ struct Game {
   Entity *wave_banner;
   Entity *player;
 
-  u64 player_genid;
+  U64 player_genid;
 
   Entity *enemy_formation;
 
-  u64 current_formation_id;
+  U64 current_formation_id;
 
   Font font;
 
@@ -450,8 +571,10 @@ struct Game {
   Texture2D background_texture;
   Texture2D player_texture;
   Texture2D invader_texture;
-
+  Texture2D invader_plasma_shot_anim;
   Texture2D orange_explosion_anim;
+  Texture2D player_missile_sprite_sheet;
+  Texture2D invader_plasma_missile_sprite_sheet;
 
   Sound invader_missile_sound;
   Sound player_missile_sound;
@@ -495,7 +618,7 @@ void entity_init_title_screen_hint_text(Game *gp, Entity *ep);
 void entity_init_player(Game *gp, Entity *ep);
 void entity_init_wave_banner(Game *gp, Entity *ep);
 void entity_init_enemy_formation(Game *gp, Entity *ep);
-void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Vector2 initial_pos);
+void entity_init_invader_in_formation(Game *gp, Entity *ep, U64 formation_id, Vector2 initial_pos);
 void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher launcher);
 
 void particle_emit(Game *gp, Particle_emitter emitter);

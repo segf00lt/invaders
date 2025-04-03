@@ -5,9 +5,11 @@
 a.out
 *.dylib
 invaders
+metaprogram
 .DS_Store
 .vscode
 *.dSYM
 tags
 vgcore*
 aseprite/*
+*.aseprite

@@ -3,6 +3,7 @@
 
 /* globals */
 
+bool player_is_taking_damage = false;
 
 /* function bodies */
 
@@ -87,7 +88,7 @@ void entity_init_player(Game *gp, Entity *ep) {
     ENTITY_FLAG_DYNAMICS |
     ENTITY_FLAG_RECEIVE_COLLISION |
     ENTITY_FLAG_APPLY_FRICTION |
-    ENTITY_FLAG_DRAW_SPRITE |
+    ENTITY_FLAG_DRAW_FRAMED_SPRITE |
     ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE |
     ENTITY_FLAG_HAS_MISSILE_LAUNCHER |
     //ENTITY_FLAG_DRAW_BOUNDS |
@@ -100,6 +101,11 @@ void entity_init_player(Game *gp, Entity *ep) {
 
   ep->missile_launcher =
   (Missile_launcher){
+    .missile_entity_flags =
+      ENTITY_FLAG_ANIMATE_SPRITE |
+      ENTITY_FLAG_DRAW_FRAMED_SPRITE |
+      0,
+
     .cooldown_period = PLAYER_MISSILE_LAUNCHER_COOLDOWN,
     .spawn_offset = PLAYER_MISSILE_SPAWN_OFFSET,
     .initial_vel = PLAYER_MISSILE_VELOCITY,
@@ -108,18 +114,29 @@ void entity_init_player(Game *gp, Entity *ep) {
     .collision_mask = PLAYER_MISSILE_COLLISION_MASK,
     .damage_amount = PLAYER_MISSILE_DAMAGE,
     .missile_sound = &gp->player_missile_sound,
+
+    .sprite = gp->player_missile_sprite_sheet,
+    .sprite_tint = WHITE,
+    .sprite_scale = PLAYER_MISSILE_SPRITE_SCALE,
+    .sprite_frame_rec = PLAYER_MISSILE_SPRITE_FRAME_REC,
+    .total_frames = PLAYER_MISSILE_SPRITE_TOTAL_FRAMES,
+    .frame_speed = PLAYER_MISSILE_SPRITE_FRAME_SPEED,
   };
 
   ep->health = PLAYER_HEALTH;
 
   ep->sprite = gp->player_texture;
   ep->sprite_tint = WHITE;
-  ep->sprite_scale = 1.0;
+  ep->sprite_scale = PLAYER_SPRITE_SCALE;
+  ep->sprite_frame_rec = PLAYER_SPRITE_FRAME_REC;
+  ep->frame_speed = PLAYER_SPRITE_FRAME_SPEED;
+  ep->total_frames = PLAYER_SPRITE_TOTAL_FRAMES;
+  ep->frame_counter = 0;
 
   ep->bounds_color = RED;
 
   ep->half_size =
-    (Vector2){ (float)ep->sprite.width * 0.5, (float)ep->sprite.height * 0.5 };
+    Vector2Scale(PLAYER_BOUNDS_SIZE, 0.5);
 }
 
 void entity_init_wave_banner(Game *gp, Entity *ep) {
@@ -171,7 +188,7 @@ void entity_init_enemy_formation(Game *gp, Entity *ep) {
   ep->bounds_color = GREEN;
 }
 
-void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Vector2 initial_pos) {
+void entity_init_invader_in_formation(Game *gp, Entity *ep, U64 formation_id, Vector2 initial_pos) {
   ep->kind = ENTITY_KIND_INVADER;
 
   ep->flags =
@@ -192,6 +209,11 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Ve
 
   ep->missile_launcher =
     (Missile_launcher){
+      .missile_entity_flags =
+        ENTITY_FLAG_ANIMATE_SPRITE |
+        ENTITY_FLAG_DRAW_FRAMED_SPRITE |
+        0,
+
       .cooldown_period = INVADER_MISSILE_COOLDOWN,
       .spawn_offset = INVADER_MISSILE_SPAWN_OFFSET,
       .initial_vel = INVADER_MISSILE_VELOCITY,
@@ -200,6 +222,13 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Ve
       .collision_mask = INVADER_MISSILE_COLLISION_MASK,
       .damage_amount = INVADER_MISSILE_DAMAGE,
       .missile_sound = &gp->invader_missile_sound,
+
+      .sprite = gp->invader_plasma_missile_sprite_sheet,
+      .sprite_tint = WHITE,
+      .sprite_scale = INVADER_MISSILE_SPRITE_SCALE,
+      .sprite_frame_rec = INVADER_MISSILE_SPRITE_FRAME_REC,
+      .total_frames = INVADER_MISSILE_SPRITE_TOTAL_FRAMES,
+      .frame_speed = INVADER_MISSILE_SPRITE_FRAME_SPEED,
     };
 
   ep->particle_emitter =
@@ -229,7 +258,7 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Ve
 
   ep->sprite = gp->invader_texture;
   ep->sprite_tint = WHITE;
-  ep->sprite_scale = 1.0;
+  ep->sprite_scale = 0.8;
 
   ep->bounds_color = GREEN;
 
@@ -241,11 +270,13 @@ void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher la
   ep->kind = ENTITY_KIND_MISSILE;
 
   ep->flags =
+    launcher.missile_entity_flags |
     ENTITY_FLAG_DYNAMICS |
     ENTITY_FLAG_APPLY_COLLISION |
     ENTITY_FLAG_APPLY_COLLISION_DAMAGE |
     ENTITY_FLAG_DIE_ON_APPLY_COLLISION |
-    ENTITY_FLAG_FILL_BOUNDS |
+    //ENTITY_FLAG_FILL_BOUNDS |
+    //ENTITY_FLAG_DRAW_BOUNDS |
     0;
 
   ep->control = ENTITY_CONTROL_MISSILE;
@@ -263,6 +294,16 @@ void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher la
   ep->vel = launcher.initial_vel;
 
   ep->fill_color = launcher.missile_color;
+  ep->bounds_color = launcher.missile_color;
+
+  ep->sprite = launcher.sprite;
+  ep->sprite_tint = launcher.sprite_tint;
+  ep->sprite_scale = launcher.sprite_scale;
+  ep->sprite_frame_rec = launcher.sprite_frame_rec;
+  ep->total_frames = launcher.total_frames;
+  ep->frame_counter = 0;
+  ep->frame_speed = launcher.frame_speed;
+  ep->cur_frame = 0;
 
   ep->half_size =
     Vector2Scale(launcher.missile_size, 0.5);
@@ -379,6 +420,12 @@ void game_update_and_draw(Game *gp) {
       gp->debug_flags  ^= GAME_DEBUG_FLAG_PLAYER_INVINCIBLE;
     }
 
+    // TODO debug sandbox
+    //if(IsKeyPressed(KEY_F4)) {
+    //  gp->state = GAME_STATE_DEBUG_SANDBOX;
+    //  gp->debug_flags &= ~GAME_DEBUG_FLAG_SANDBOX_LOADED;
+    //}
+
     int key = GetCharPressed();
     if(key != 0) {
       gp->player_input.pressed_any_key = true;
@@ -387,21 +434,6 @@ void game_update_and_draw(Game *gp) {
   } /* input */
 
   { /* update */
-
-    if(gp->flags & GAME_FLAG_PAUSE) {
-      assert(gp->state != GAME_STATE_NONE && gp->state != GAME_STATE_TITLE_SCREEN && gp->state != GAME_STATE_GAME_OVER);
-      if(gp->player_input.pressed_any_key) {
-        gp->flags ^= GAME_FLAG_PAUSE;
-      } else {
-        goto update_end;
-      }
-    }
-
-    if(gp->background_y_offset >= WINDOW_HEIGHT) {
-      gp->background_y_offset = 0;
-    } else {
-      gp->background_y_offset -= gp->timestep * gp->background_scroll_speed;
-    }
 
     switch(gp->state) {
       default:
@@ -616,13 +648,38 @@ void game_update_and_draw(Game *gp) {
             }
           }
         } break;
+        // TODO debug sandbox
+        //case GAME_STATE_DEBUG_SANDBOX:
+        //  {
+        //    if(!(gp->debug_flags & GAME_DEBUG_FLAG_SANDBOX_LOADED)) {
+        //      // clear and respawn entities in the sandbox
+        //    } else {
+        //    }
+        //  } break;
+    } /* switch(gp->state) */
+
+    if(gp->state != GAME_STATE_DEBUG_SANDBOX) {
+      if(gp->flags & GAME_FLAG_PAUSE) {
+        assert(gp->state != GAME_STATE_NONE && gp->state != GAME_STATE_TITLE_SCREEN && gp->state != GAME_STATE_GAME_OVER);
+        if(gp->player_input.pressed_any_key) {
+          gp->flags ^= GAME_FLAG_PAUSE;
+        } else {
+          goto update_end;
+        }
+      }
+
+      if(gp->background_y_offset >= WINDOW_HEIGHT) {
+        gp->background_y_offset = 0;
+      } else {
+        gp->background_y_offset -= gp->timestep * gp->background_scroll_speed;
+      }
     }
 
     gp->live_entities = 0;
     gp->live_missiles = 0;
 
     for(Entity_order order = ENTITY_ORDER_FIRST; order < ENTITY_ORDER_MAX; order++) {
-      for(s64 i = 0; i < MAX_ENTITIES; i++) {
+      for(S64 i = 0; i < MAX_ENTITIES; i++) {
         Entity *ep = &gp->entities[i];
 
         if(ep->live == 0 || ep->update_order != order) {
@@ -657,16 +714,50 @@ void game_update_and_draw(Game *gp) {
                 ep->accel = (Vector2){0};
 
                 if(gp->player_input.move_left) {
+                  //ep->sprite_frame_rec.x = ep->sprite_frame_rec.width;
+                  ep->flags |= ENTITY_FLAG_DO_MOVE_ANIMATION;
+                  ep->flags |= ENTITY_FLAG_FLIP_SPRITE;
                   ep->accel.x += -PLAYER_ACCEL;
                 } else if(gp->player_input.stop_move_left) {
+                  ep->cur_frame = 0;
+                  ep->flags &= ~ENTITY_FLAG_DO_MOVE_ANIMATION;
+                  ep->flags &= ~ENTITY_FLAG_FLIP_SPRITE;
+                  ep->sprite_frame_rec = PLAYER_SPRITE_FRAME_REC;
                   ep->vel.x = 0;
                 }
 
                 if(gp->player_input.move_right) {
+                  //ep->sprite_frame_rec.x = ep->sprite_frame_rec.width;
+                  ep->flags |= ENTITY_FLAG_DO_MOVE_ANIMATION;
                   ep->accel.x += PLAYER_ACCEL;
                 } else if(gp->player_input.stop_move_right) {
+                  ep->cur_frame = 0;
+                  ep->flags &= ~ENTITY_FLAG_DO_MOVE_ANIMATION;
+                  ep->sprite_frame_rec = PLAYER_SPRITE_FRAME_REC;
                   ep->vel.x = 0;
                 }
+
+                // TODO cleanup
+                if(ep->flags & ENTITY_FLAG_DO_MOVE_ANIMATION) {
+                  if(ep->cur_frame < ep->total_frames) {
+                    ep->frame_counter++;
+
+                    if(ep->frame_counter >= (TARGET_FPS/ep->frame_speed)) {
+                      ep->frame_counter = 0;
+                      ep->sprite_frame_rec.x = (float)ep->cur_frame * (float)ep->sprite_frame_rec.width;
+                      ep->cur_frame++;
+                    }
+
+                  }
+                }
+
+#if 0
+                if(ep->damage_blink_total_time > 0) {
+                  player_is_taking_damage = true;
+                } else {
+                  player_is_taking_damage = false;
+                }
+#endif
 
                 if(ep->received_damage > 0) {
 
@@ -682,6 +773,7 @@ void game_update_and_draw(Game *gp) {
                     ep->damage_blink_total_time = PLAYER_DAMAGE_BLINK_TOTAL_TIME;
                     ep->damage_blink_sprite_tint = PLAYER_DAMAGE_BLINK_SPRITE_TINT;
                   }
+                } else {
                 }
 
                 if(gp->debug_flags & GAME_DEBUG_FLAG_PLAYER_INVINCIBLE) {
@@ -864,7 +956,7 @@ void game_update_and_draw(Game *gp) {
                 };
 
                 if(CheckCollisionRecs(ep_rec, colliding_entity_rec)) {
-                  if(ENTITY_KIND_IN_MASK(colliding_entity->kind, ep->collision_mask)) {
+                  if(EntityKindInMask(colliding_entity->kind, ep->collision_mask)) {
                     applied_collision = true;
                     colliding_entities[colliding_entities_count++] = colliding_entity;
                   }
@@ -894,6 +986,21 @@ void game_update_and_draw(Game *gp) {
               entity_die(gp, ep);
               goto entity_update_end;
             }
+          }
+
+          if(ep->flags & ENTITY_FLAG_ANIMATE_SPRITE) {
+            ep->frame_counter++;
+
+            if(ep->frame_counter >= (TARGET_FPS/ep->frame_speed)) {
+              ep->frame_counter = 0;
+              ep->sprite_frame_rec.x = (float)ep->cur_frame * (float)ep->sprite_frame_rec.width;
+              ep->cur_frame++;
+            }
+
+            if(ep->cur_frame >= ep->total_frames) {
+              ep->cur_frame = 0;
+            }
+
           }
 
           if(ep->flags & ENTITY_FLAG_HAS_MISSILE_LAUNCHER) {
@@ -982,10 +1089,10 @@ update_end:;
         gp->background_texture,
         (Rectangle){ 0, gp->background_y_offset, WINDOW_WIDTH, WINDOW_HEIGHT },
         (Vector2){0},
-        (Color){255, 255, 255, 255});
+        (Color){255, 255, 255, 190});
 
     for(Entity_order order = ENTITY_ORDER_FIRST; order < ENTITY_ORDER_MAX; order++) {
-      for(s64 i = 0; i < MAX_ENTITIES; i++) {
+      for(S64 i = 0; i < MAX_ENTITIES; i++) {
         Entity *ep = &gp->entities[i];
 
         if(ep->live == 0 || ep->draw_order != order) {
@@ -1007,6 +1114,38 @@ update_end:;
                 ep->sprite,
                 Vector2Subtract(ep->pos, ep->half_size),
                 tint);
+          }
+
+          if(ep->flags & ENTITY_FLAG_DRAW_FRAMED_SPRITE) {
+            Color tint = ep->sprite_tint;
+
+            if(ep->flags & ENTITY_FLAG_USE_DAMAGE_BLINK_TINT) {
+              if(ep->damage_blink_high) {
+                tint = ep->damage_blink_sprite_tint;
+              }
+            }
+
+            Vector2 pos =
+            {
+              ep->pos.x - 0.5*(float)ep->sprite_frame_rec.width*ep->sprite_scale,
+              ep->pos.y - 0.5*(float)ep->sprite_frame_rec.height*ep->sprite_scale,
+            };
+
+            Rectangle source = ep->sprite_frame_rec;
+
+            if(ep->flags & ENTITY_FLAG_FLIP_SPRITE) {
+              source.width *= -1;
+            }
+
+            Rectangle dest =
+            {
+              .x = pos.x, .y = pos.y,
+              .width = ep->sprite_frame_rec.width * ep->sprite_scale,
+              .height = ep->sprite_frame_rec.height * ep->sprite_scale,
+            };
+            Vector2 origin = {0};
+
+            DrawTexturePro(ep->sprite, source, dest, origin, 0, tint);
           }
 
           if(ep->flags & ENTITY_FLAG_DRAW_TEXT) {
@@ -1073,18 +1212,27 @@ update_end:;
 
       /* player health */
       if(gp->player && gp->player->live && gp->player->kind == ENTITY_KIND_PLAYER) {
-        const float scale = 0.60;
-        const float spacing = 5.0;
-        const float width = (float)gp->player_texture.width * scale + 1.5*spacing;
-        Vector2 v =
+        Rectangle rec =
         {
-          (float)WINDOW_WIDTH - width,
-          spacing,
+          0, 0,
+          32, 32,
         };
+        const float scale = 1.0;
+        const float spacing = 5.0;
+        const float width = rec.width * scale + spacing;
+
+        Rectangle dest =
+        {
+          .x = (float)WINDOW_WIDTH - width,
+          .y = spacing,
+          .width = rec.width * scale,
+          .height = rec.height * scale
+        };
+        Vector2 origin = {0};
 
         for(int i = 0; i < gp->player->health; i++) {
-          DrawTextureEx(gp->player_texture, v, 0, scale, WHITE);
-          v.x -= width;
+          DrawTexturePro(gp->player_texture, rec, dest, origin, 0, WHITE);
+          dest.x -= width;
         }
       }
 
@@ -1136,7 +1284,16 @@ update_end:;
     int offset_y = (GetScreenHeight() - (int)(WINDOW_HEIGHT * scale)) >> 1;
 
     BeginDrawing();
+
+#if 0
+    if(player_is_taking_damage) {
+      ClearBackground(RED);
+    } else {
+      ClearBackground(DARKBLUE);
+    }
+#endif
     ClearBackground(DARKBLUE);
+
     {
       Rectangle dest = { (float)offset_x, (float)offset_y, WINDOW_WIDTH * scale, WINDOW_HEIGHT * scale };
       DrawRectangleRec(dest, BLACK);

@@ -3,6 +3,7 @@ FLAGS = -g -O0 -Wall -Wpedantic -Werror -Wno-switch -Wno-comment -Wno-format-ped
 TARGET = invaders.c #./third_party/*.c
 EXE = invaders
 LDFLAGS = -lraylib -lm
+METAPROGRAM_EXE = metaprogram
 
 UNAME_S = $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
@@ -16,6 +17,9 @@ else
 	SHARED = -shared
 	FLAGS += -L'/usr/local/lib/' -I'/usr/local/include/'
 endif
+
+metaprogram: tags
+	$(CC) $(FLAGS) -fPIC json_parse_test.c -o $(METAPROGRAM_EXE) $(LDFLAGS)
 
 game_module: tags
 	$(CC) $(FLAGS) -fPIC main.c -o $(EXE) $(LDFLAGS)
