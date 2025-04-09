@@ -16,7 +16,9 @@ typedef struct Arena_save Arena_save;
 #define arena_init(a) arena_init_full(a, false, JLIB_ARENA_INITIAL_BLOCK_BYTES)
 #define arena_tmp(a) arena_init_full(a, true, JLIB_ARENA_TMP_INITIAL_BLOCK_BYTES)
 void arena_init_full(Arena *a, bool cannot_grow, size_t initial_block_bytes);
-void* arena_alloc(Arena *a, size_t bytes);
+#define arena_alloc(a, bytes) arena_alloc_(a, bytes, 1)
+#define arena_alloc_no_zero(a, bytes) arena_alloc_(a, bytes, 0)
+void* arena_alloc_(Arena *a, size_t bytes, b8 zero_mem);
 Arena_save arena_to_save(Arena *a);
 void arena_from_save(Arena *a, Arena_save save);
 void arena_step_back(Arena *a, size_t bytes);
@@ -90,12 +92,12 @@ INLINE uint64_t __arena_next_pow2(uint64_t n) {
 }
 
 //TODO make alignment an optional parameter
-INLINE void* arena_alloc(Arena *a, size_t bytes) {
+INLINE void* arena_alloc_(Arena *a, size_t bytes, b8 zero_mem) {
     if(bytes == 0) return NULL;
 
     if(bytes + a->pos >= a->block_sizes[a->cur_block]) {
         if(a->cannot_grow) {
-            assert(!"arena_alloc: arena capacity exceeded, crashing");
+            ASSERT(!"arena_alloc: arena capacity exceeded, crashing");
             //fprintf(stderr, "arena_alloc: arena cannot grow so malloc(%zu) bytes\n", bytes);
             //return malloc(bytes);
         }
@@ -113,7 +115,10 @@ INLINE void* arena_alloc(Arena *a, size_t bytes) {
     a->pos = __arena_align_up(a->pos, sizeof(void*));
     void *ptr = a->blocks[a->cur_block] + a->pos;
     a->pos += bytes;
-    memset(ptr, 0, bytes);
+
+    if(zero_mem) {
+      memory_set(ptr, 0, bytes);
+    }
 
     return ptr;
 }

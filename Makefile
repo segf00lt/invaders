@@ -18,10 +18,15 @@ else
 	FLAGS += -L'/usr/local/lib/' -I'/usr/local/include/'
 endif
 
-metaprogram: tags
-	$(CC) $(FLAGS) -fPIC json_parse_test.c -o $(METAPROGRAM_EXE) $(LDFLAGS)
+first: game_module
 
-game_module: tags
+metaprogram: tags
+	$(CC) $(FLAGS) -fPIC metaprogram.c -o $(METAPROGRAM_EXE) $(LDFLAGS)
+
+run_metaprogram:
+	./metaprogram 2>&1 | tee metaprogram.log
+
+game_module: run_metaprogram tags
 	$(CC) $(FLAGS) -fPIC main.c -o $(EXE) $(LDFLAGS)
 	$(CC) $(FLAGS) -fPIC $(SHARED) $(TARGET) -o $(GAME_MODULE) $(LDFLAGS)
 

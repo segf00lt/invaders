@@ -15,13 +15,8 @@ typedef void (*Game_update_and_draw_proc)(Game *);
 void load_assets(Game *gp) {
   gp->font = GetFontDefault();
   gp->background_texture = LoadTexture("sprites/nightsky.png");
-  gp->player_texture = LoadTexture("sprites/ship_sheet.png");
-  gp->invader_texture = LoadTexture("sprites/enemy.png");
 
-  gp->orange_explosion_anim = LoadTexture("sprites/orange_explosion.png");
-
-  gp->player_missile_sprite_sheet = LoadTexture("sprites/ship_missile.png");
-  gp->invader_plasma_missile_sprite_sheet = LoadTexture("sprites/invader_plasma_missile.png");
+  gp->sprite_atlas = LoadTexture("aseprite/atlas.png");
 
   gp->player_missile_sound = LoadSound("sounds/missile_sound.wav");
   gp->invader_missile_sound = LoadSound("sounds/invader_missile.wav");
@@ -38,11 +33,7 @@ void unload_assets(Game *gp) {
   UnloadRenderTexture(gp->render_texture);
 
   UnloadTexture(gp->background_texture);
-  UnloadTexture(gp->player_texture);
-  UnloadTexture(gp->invader_texture);
-  UnloadTexture(gp->orange_explosion_anim);
-  UnloadTexture(gp->player_missile_sprite_sheet);
-  UnloadTexture(gp->invader_plasma_missile_sprite_sheet);
+  UnloadTexture(gp->sprite_atlas);
 
   UnloadSound(gp->player_missile_sound);
   UnloadSound(gp->invader_missile_sound);
@@ -79,14 +70,14 @@ int main(void) {
 
   void *game_module = dlopen(INVADERS_MODULE_PATH, RTLD_NOW);
   Game_update_and_draw_proc game_update_and_draw_proc = (Game_update_and_draw_proc)dlsym(game_module, "game_update_and_draw");
-  S64 game_module_modtime = GetFileModTime(INVADERS_MODULE_PATH);
+  s64 game_module_modtime = GetFileModTime(INVADERS_MODULE_PATH);
 
 
   while(!WindowShouldClose()) {
     game_update_and_draw_proc(gp);
 
     if(gp->debug_flags & GAME_DEBUG_FLAG_HOT_RELOAD) {
-      S64 modtime = GetFileModTime(INVADERS_MODULE_PATH);
+      s64 modtime = GetFileModTime(INVADERS_MODULE_PATH);
       if(game_module_modtime != modtime) {
         game_module_modtime = modtime;
         TraceLog(LOG_DEBUG, "reloading game code");
@@ -95,7 +86,7 @@ int main(void) {
         load_assets(gp);
 
         WaitTime(0.2f);
-        assert(!dlclose(game_module));
+        ASSERT(!dlclose(game_module));
         game_module = dlopen(INVADERS_MODULE_PATH, RTLD_NOW);
         game_update_and_draw_proc = (Game_update_and_draw_proc)dlsym(game_module, "game_update_and_draw");
 

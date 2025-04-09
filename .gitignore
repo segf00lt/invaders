@@ -13,3 +13,4 @@ tags
 vgcore*
 aseprite/*
 *.aseprite
+*.log

@@ -1,6 +1,11 @@
 #include "invaders.h"
 
 
+/* generated code */
+
+#include "invaders_sprite_data.c"
+
+
 /* globals */
 
 bool player_is_taking_damage = false;
@@ -21,7 +26,7 @@ INLINE Entity *entity_spawn(Game *gp) {
   if(!gp->entity_free_list) {
     ep = &gp->entities[gp->entities_allocated];
     gp->entities_allocated++;
-    assert(gp->entities_allocated < MAX_ENTITIES);
+    ASSERT(gp->entities_allocated < MAX_ENTITIES);
   } else {
     ep = gp->entity_free_list;
     gp->entity_free_list = gp->entity_free_list->free_list_next;
@@ -88,7 +93,7 @@ void entity_init_player(Game *gp, Entity *ep) {
     ENTITY_FLAG_DYNAMICS |
     ENTITY_FLAG_RECEIVE_COLLISION |
     ENTITY_FLAG_APPLY_FRICTION |
-    ENTITY_FLAG_DRAW_FRAMED_SPRITE |
+    ENTITY_FLAG_HAS_SPRITE |
     ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE |
     ENTITY_FLAG_HAS_MISSILE_LAUNCHER |
     //ENTITY_FLAG_DRAW_BOUNDS |
@@ -102,8 +107,7 @@ void entity_init_player(Game *gp, Entity *ep) {
   ep->missile_launcher =
   (Missile_launcher){
     .missile_entity_flags =
-      ENTITY_FLAG_ANIMATE_SPRITE |
-      ENTITY_FLAG_DRAW_FRAMED_SPRITE |
+      ENTITY_FLAG_HAS_SPRITE |
       0,
 
     .cooldown_period = PLAYER_MISSILE_LAUNCHER_COOLDOWN,
@@ -115,23 +119,16 @@ void entity_init_player(Game *gp, Entity *ep) {
     .damage_amount = PLAYER_MISSILE_DAMAGE,
     .missile_sound = &gp->player_missile_sound,
 
-    .sprite = gp->player_missile_sprite_sheet,
+    .sprite = SPRITE_SHIP_MISSILE,
     .sprite_tint = WHITE,
     .sprite_scale = PLAYER_MISSILE_SPRITE_SCALE,
-    .sprite_frame_rec = PLAYER_MISSILE_SPRITE_FRAME_REC,
-    .total_frames = PLAYER_MISSILE_SPRITE_TOTAL_FRAMES,
-    .frame_speed = PLAYER_MISSILE_SPRITE_FRAME_SPEED,
   };
 
   ep->health = PLAYER_HEALTH;
 
-  ep->sprite = gp->player_texture;
+  ep->sprite = SPRITE_SHIP_IDLE;
   ep->sprite_tint = WHITE;
   ep->sprite_scale = PLAYER_SPRITE_SCALE;
-  ep->sprite_frame_rec = PLAYER_SPRITE_FRAME_REC;
-  ep->frame_speed = PLAYER_SPRITE_FRAME_SPEED;
-  ep->total_frames = PLAYER_SPRITE_TOTAL_FRAMES;
-  ep->frame_counter = 0;
 
   ep->bounds_color = RED;
 
@@ -162,8 +159,9 @@ void entity_init_enemy_formation(Game *gp, Entity *ep) {
   gp->current_formation_id++;
 
   ep->formation_id = gp->current_formation_id;
+  // TODO do a better job of spacing enemies in the formation
   ep->formation_slot_size =
-    (Vector2){ gp->invader_texture.width + ENEMY_FORMATION_SPACING.x, gp->invader_texture.height + ENEMY_FORMATION_SPACING.y };
+    Vector2Add(INVADER_BOUNDS_SIZE, ENEMY_FORMATION_SPACING);
 
   ep->kind = ENTITY_KIND_FORMATION;
 
@@ -188,13 +186,13 @@ void entity_init_enemy_formation(Game *gp, Entity *ep) {
   ep->bounds_color = GREEN;
 }
 
-void entity_init_invader_in_formation(Game *gp, Entity *ep, U64 formation_id, Vector2 initial_pos) {
+void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Vector2 initial_pos) {
   ep->kind = ENTITY_KIND_INVADER;
 
   ep->flags =
     ENTITY_FLAG_DYNAMICS |
     ENTITY_FLAG_RECEIVE_COLLISION |
-    ENTITY_FLAG_DRAW_SPRITE |
+    ENTITY_FLAG_HAS_SPRITE |
     ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE |
     ENTITY_FLAG_HAS_MISSILE_LAUNCHER |
     //ENTITY_FLAG_DRAW_BOUNDS |
@@ -210,8 +208,7 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, U64 formation_id, Ve
   ep->missile_launcher =
     (Missile_launcher){
       .missile_entity_flags =
-        ENTITY_FLAG_ANIMATE_SPRITE |
-        ENTITY_FLAG_DRAW_FRAMED_SPRITE |
+        ENTITY_FLAG_HAS_SPRITE |
         0,
 
       .cooldown_period = INVADER_MISSILE_COOLDOWN,
@@ -223,12 +220,9 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, U64 formation_id, Ve
       .damage_amount = INVADER_MISSILE_DAMAGE,
       .missile_sound = &gp->invader_missile_sound,
 
-      .sprite = gp->invader_plasma_missile_sprite_sheet,
+      .sprite = SPRITE_INVADER_PLASMA_MISSILE,
       .sprite_tint = WHITE,
       .sprite_scale = INVADER_MISSILE_SPRITE_SCALE,
-      .sprite_frame_rec = INVADER_MISSILE_SPRITE_FRAME_REC,
-      .total_frames = INVADER_MISSILE_SPRITE_TOTAL_FRAMES,
-      .frame_speed = INVADER_MISSILE_SPRITE_FRAME_SPEED,
     };
 
   ep->particle_emitter =
@@ -236,19 +230,13 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, U64 formation_id, Ve
       .emit_count = 0,
       .particle = {
         .flags =
-          PARTICLE_FLAG_HAS_SPRITE_ANIM |
+          PARTICLE_FLAG_HAS_SPRITE |
           PARTICLE_FLAG_DIE_WHEN_ANIM_FINISH |
           0,
         .half_size = { 16, 16 },
-        .sprite = gp->orange_explosion_anim,
+        .sprite = SPRITE_ORANGE_EXPLOSION_MAIN,
         .sprite_tint = WHITE,
-        .sprite_scale = 2.4,
-        .frame_rec = {
-          0, 0,
-          32, 32,
-        },
-        .total_frames = 5,
-        .frame_speed = 15,
+        .sprite_scale = ORANGE_EXPLOSION_SCALE,
       },
     };
 
@@ -256,14 +244,15 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, U64 formation_id, Ve
 
   ep->pos = initial_pos;
 
-  ep->sprite = gp->invader_texture;
+  ep->sprite = SPRITE_INVADER_IDLE;
   ep->sprite_tint = WHITE;
-  ep->sprite_scale = 0.8;
+  ep->sprite_scale = INVADER_SPRITE_SCALE;
 
   ep->bounds_color = GREEN;
 
+  // TODO improve how entities are sized
   ep->half_size =
-    (Vector2){ (float)ep->sprite.width * 0.5, (float)ep->sprite.height * 0.5 };
+    Vector2Scale(INVADER_BOUNDS_SIZE, 0.5);
 }
 
 void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher launcher) {
@@ -289,7 +278,7 @@ void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher la
 
   ep->missile_sound = launcher.missile_sound;
 
-  ep->pos = launcher.initial_pos;
+  ep->pos = Vector2Add(launcher.initial_pos, launcher.spawn_offset);
 
   ep->vel = launcher.initial_vel;
 
@@ -299,14 +288,109 @@ void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher la
   ep->sprite = launcher.sprite;
   ep->sprite_tint = launcher.sprite_tint;
   ep->sprite_scale = launcher.sprite_scale;
-  ep->sprite_frame_rec = launcher.sprite_frame_rec;
-  ep->total_frames = launcher.total_frames;
-  ep->frame_counter = 0;
-  ep->frame_speed = launcher.frame_speed;
-  ep->cur_frame = 0;
 
   ep->half_size =
     Vector2Scale(launcher.missile_size, 0.5);
+}
+
+void sprite_update(Game *gp, Sprite *sp) {
+  if(sp->flags & SPRITE_FLAG_STILL) {
+    return;
+  }
+
+  if(sp->flags & SPRITE_FLAG_DIR_FORWARD) {
+
+    if(sp->cur_frame < sp->total_frames) {
+      sp->frame_counter++;
+
+      if(sp->frame_counter >= (TARGET_FPS / sp->fps)) {
+        sp->frame_counter = 0;
+        sp->cur_frame++;
+      }
+
+    }
+
+    if(sp->cur_frame >= sp->total_frames) {
+      if(sp->flags & SPRITE_FLAG_INFINITE_REPEAT) {
+        if(sp->flags & SPRITE_FLAG_PINGPONG) {
+          sp->cur_frame--;
+          sp->flags ^= SPRITE_FLAG_DIR_FORWARD | SPRITE_FLAG_DIR_REVERSE;
+        } else {
+          sp->cur_frame = 0;
+        }
+      } else {
+        sp->cur_frame--;
+        sp->flags |= SPRITE_FLAG_AT_LAST_FRAME | SPRITE_FLAG_STILL;
+        ASSERT(sp->cur_frame >= 0 && sp->cur_frame < sp->total_frames);
+      }
+    }
+
+  } else if(sp->flags & SPRITE_FLAG_DIR_REVERSE) {
+
+    if(sp->cur_frame >= 0) {
+      sp->frame_counter++;
+
+      if(sp->frame_counter >= (TARGET_FPS / sp->fps)) {
+        sp->frame_counter = 0;
+        sp->cur_frame--;
+      }
+
+    }
+
+    if(sp->cur_frame < 0) {
+      if(sp->flags & SPRITE_FLAG_INFINITE_REPEAT) {
+        if(sp->flags & SPRITE_FLAG_PINGPONG) {
+          sp->cur_frame++;
+          sp->flags ^= SPRITE_FLAG_DIR_FORWARD | SPRITE_FLAG_DIR_REVERSE;
+        } else {
+          sp->cur_frame = sp->total_frames - 1;
+        }
+      } else {
+        sp->cur_frame++;
+        sp->flags |= SPRITE_FLAG_AT_LAST_FRAME | SPRITE_FLAG_STILL;
+        ASSERT(sp->cur_frame >= 0 && sp->cur_frame < sp->total_frames);
+      }
+    }
+
+  }
+
+
+}
+
+INLINE void draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint) {
+  draw_sprite_ex(gp, sp, pos, 1.0f, 0.0f, tint);
+}
+
+void draw_sprite_ex(Game *gp, Sprite sp, Vector2 pos, f32 scale, f32 rotation, Color tint) {
+  ASSERT(sp.cur_frame >= 0 && sp.cur_frame < sp.total_frames);
+
+  Sprite_frame frame = __sprite_frames[sp.cur_frame + sp.first_frame];
+
+  Rectangle source_rec =
+  {
+    .x = (float)frame.x,
+    .y = (float)frame.y,
+    .width = (float)frame.w,
+    .height = (float)frame.h,
+  };
+
+  Rectangle dest_rec =
+  {
+    .x = pos.x - scale*0.5f*source_rec.width,
+    .y = pos.y - scale*0.5f*source_rec.height,
+    .width = scale*source_rec.width,
+    .height = scale*source_rec.height,
+  };
+
+  if(sp.flags & SPRITE_FLAG_DRAW_MIRRORED_X) {
+    dest_rec.width *= -1;
+  }
+
+  if(sp.flags & SPRITE_FLAG_DRAW_MIRRORED_Y) {
+    dest_rec.height *= -1;
+  }
+
+  DrawTexturePro(gp->sprite_atlas, source_rec, dest_rec, (Vector2){0}, rotation, tint);
 }
 
 void particle_emit(Game *gp, Particle_emitter emitter) {
@@ -329,7 +413,11 @@ void game_reset(Game *gp) {
   gp->entities_allocated = 0;
   gp->live_entities = 0;
 
-  memset(gp->entities, 0, sizeof(Entity) * MAX_ENTITIES);
+  gp->particles_buf_pos = 0;
+  gp->live_particles = 0;
+
+  memory_set(gp->entities, 0, sizeof(Entity) * MAX_ENTITIES);
+  memory_set(gp->particles, 0, sizeof(Particle) * MAX_PARTICLES);
 
   gp->background_scroll_speed = BACKGROUND_SCROLL_SPEED;
 
@@ -413,7 +501,7 @@ void game_update_and_draw(Game *gp) {
     }
 
     if(IsKeyPressed(KEY_F10)) {
-      ToggleBorderlessWindowed();
+      gp->debug_flags ^= GAME_DEBUG_FLAG_DRAW_ALL_ENTITY_BOUNDS;
     }
 
     if(IsKeyPressed(KEY_F7)) {
@@ -434,6 +522,15 @@ void game_update_and_draw(Game *gp) {
   } /* input */
 
   { /* update */
+
+    if(gp->flags & GAME_FLAG_PAUSE) {
+      ASSERT(gp->state != GAME_STATE_NONE && gp->state != GAME_STATE_TITLE_SCREEN && gp->state != GAME_STATE_GAME_OVER);
+      if(gp->player_input.pressed_any_key) {
+        gp->flags ^= GAME_FLAG_PAUSE;
+      } else {
+        goto update_end;
+      }
+    }
 
     switch(gp->state) {
       default:
@@ -658,28 +755,17 @@ void game_update_and_draw(Game *gp) {
         //  } break;
     } /* switch(gp->state) */
 
-    if(gp->state != GAME_STATE_DEBUG_SANDBOX) {
-      if(gp->flags & GAME_FLAG_PAUSE) {
-        assert(gp->state != GAME_STATE_NONE && gp->state != GAME_STATE_TITLE_SCREEN && gp->state != GAME_STATE_GAME_OVER);
-        if(gp->player_input.pressed_any_key) {
-          gp->flags ^= GAME_FLAG_PAUSE;
-        } else {
-          goto update_end;
-        }
-      }
-
-      if(gp->background_y_offset >= WINDOW_HEIGHT) {
-        gp->background_y_offset = 0;
-      } else {
-        gp->background_y_offset -= gp->timestep * gp->background_scroll_speed;
-      }
+    if(gp->background_y_offset >= WINDOW_HEIGHT) {
+      gp->background_y_offset = 0;
+    } else {
+      gp->background_y_offset -= gp->timestep * gp->background_scroll_speed;
     }
 
     gp->live_entities = 0;
     gp->live_missiles = 0;
 
     for(Entity_order order = ENTITY_ORDER_FIRST; order < ENTITY_ORDER_MAX; order++) {
-      for(S64 i = 0; i < MAX_ENTITIES; i++) {
+      for(s64 i = 0; i < MAX_ENTITIES; i++) {
         Entity *ep = &gp->entities[i];
 
         if(ep->live == 0 || ep->update_order != order) {
@@ -713,42 +799,19 @@ void game_update_and_draw(Game *gp) {
 
                 ep->accel = (Vector2){0};
 
+                ep->sprite = SPRITE_SHIP_IDLE;
+
                 if(gp->player_input.move_left) {
-                  //ep->sprite_frame_rec.x = ep->sprite_frame_rec.width;
-                  ep->flags |= ENTITY_FLAG_DO_MOVE_ANIMATION;
-                  ep->flags |= ENTITY_FLAG_FLIP_SPRITE;
+                  // TODO move animations
                   ep->accel.x += -PLAYER_ACCEL;
                 } else if(gp->player_input.stop_move_left) {
-                  ep->cur_frame = 0;
-                  ep->flags &= ~ENTITY_FLAG_DO_MOVE_ANIMATION;
-                  ep->flags &= ~ENTITY_FLAG_FLIP_SPRITE;
-                  ep->sprite_frame_rec = PLAYER_SPRITE_FRAME_REC;
                   ep->vel.x = 0;
                 }
 
                 if(gp->player_input.move_right) {
-                  //ep->sprite_frame_rec.x = ep->sprite_frame_rec.width;
-                  ep->flags |= ENTITY_FLAG_DO_MOVE_ANIMATION;
                   ep->accel.x += PLAYER_ACCEL;
                 } else if(gp->player_input.stop_move_right) {
-                  ep->cur_frame = 0;
-                  ep->flags &= ~ENTITY_FLAG_DO_MOVE_ANIMATION;
-                  ep->sprite_frame_rec = PLAYER_SPRITE_FRAME_REC;
                   ep->vel.x = 0;
-                }
-
-                // TODO cleanup
-                if(ep->flags & ENTITY_FLAG_DO_MOVE_ANIMATION) {
-                  if(ep->cur_frame < ep->total_frames) {
-                    ep->frame_counter++;
-
-                    if(ep->frame_counter >= (TARGET_FPS/ep->frame_speed)) {
-                      ep->frame_counter = 0;
-                      ep->sprite_frame_rec.x = (float)ep->cur_frame * (float)ep->sprite_frame_rec.width;
-                      ep->cur_frame++;
-                    }
-
-                  }
                 }
 
 #if 0
@@ -988,21 +1051,6 @@ void game_update_and_draw(Game *gp) {
             }
           }
 
-          if(ep->flags & ENTITY_FLAG_ANIMATE_SPRITE) {
-            ep->frame_counter++;
-
-            if(ep->frame_counter >= (TARGET_FPS/ep->frame_speed)) {
-              ep->frame_counter = 0;
-              ep->sprite_frame_rec.x = (float)ep->cur_frame * (float)ep->sprite_frame_rec.width;
-              ep->cur_frame++;
-            }
-
-            if(ep->cur_frame >= ep->total_frames) {
-              ep->cur_frame = 0;
-            }
-
-          }
-
           if(ep->flags & ENTITY_FLAG_HAS_MISSILE_LAUNCHER) {
 
             if(gp->state == GAME_STATE_MAIN_LOOP) {
@@ -1014,7 +1062,7 @@ void game_update_and_draw(Game *gp) {
                     Entity *missile = entity_spawn(gp);
                     ep->missile_launcher.initial_pos = ep->pos;
                     entity_init_missile_from_launcher(gp, missile, ep->missile_launcher);
-                    assert(missile->missile_sound);
+                    ASSERT(missile->missile_sound);
                     PlaySound(*missile->missile_sound);
                   }
                 }
@@ -1024,6 +1072,10 @@ void game_update_and_draw(Game *gp) {
               }
             }
 
+          }
+
+          if(ep->flags & ENTITY_FLAG_HAS_SPRITE) {
+            sprite_update(gp, &ep->sprite);
           }
 
           if(ep->flags & ENTITY_FLAG_BLINK_TEXT) {
@@ -1041,6 +1093,8 @@ entity_update_end:; // apparently just placing a label somewhere isn't legal
       } /* update entities */
     }
 
+    gp->live_particles = 0;
+
     for(int i = 0; i < MAX_PARTICLES; i++) { /* update particles */
 
       Particle *p = &gp->particles[i];
@@ -1048,26 +1102,15 @@ entity_update_end:; // apparently just placing a label somewhere isn't legal
       if(!p->live) {
         continue;
       }
+      gp->live_particles++;
 
       { /* particle_update */
-        if(p->flags & PARTICLE_FLAG_HAS_SPRITE_ANIM) {
-          p->frame_counter++;
-
-          if(p->frame_counter >= (TARGET_FPS/p->frame_speed)) {
-            p->frame_counter = 0;
-            p->frame_rec.x = (float)p->cur_frame * (float)p->frame_rec.width;
-            p->cur_frame++;
-          }
+        if(p->flags & PARTICLE_FLAG_HAS_SPRITE) {
+          sprite_update(gp, &p->sprite);
 
           if(p->flags & PARTICLE_FLAG_DIE_WHEN_ANIM_FINISH) {
-            if(p->cur_frame >= p->total_frames) {
+            if(p->sprite.flags & SPRITE_FLAG_AT_LAST_FRAME) {
               p->live = 0;
-            }
-          }
-
-          if(p->flags & PARTICLE_FLAG_MULTIPLE_ANIM_CYCLES) {
-            if(p->cur_frame >= p->total_frames) {
-              p->cur_frame = 0;
             }
           }
 
@@ -1092,7 +1135,7 @@ update_end:;
         (Color){255, 255, 255, 190});
 
     for(Entity_order order = ENTITY_ORDER_FIRST; order < ENTITY_ORDER_MAX; order++) {
-      for(S64 i = 0; i < MAX_ENTITIES; i++) {
+      for(s64 i = 0; i < MAX_ENTITIES; i++) {
         Entity *ep = &gp->entities[i];
 
         if(ep->live == 0 || ep->draw_order != order) {
@@ -1101,7 +1144,7 @@ update_end:;
 
         { /* entity_draw */
 
-          if(ep->flags & ENTITY_FLAG_DRAW_SPRITE) {
+          if(ep->flags & ENTITY_FLAG_HAS_SPRITE) {
             Color tint = ep->sprite_tint;
 
             if(ep->flags & ENTITY_FLAG_USE_DAMAGE_BLINK_TINT) {
@@ -1110,42 +1153,8 @@ update_end:;
               }
             }
 
-            DrawTextureV(
-                ep->sprite,
-                Vector2Subtract(ep->pos, ep->half_size),
-                tint);
-          }
+            draw_sprite_ex(gp, ep->sprite, ep->pos, ep->sprite_scale, 0, tint);
 
-          if(ep->flags & ENTITY_FLAG_DRAW_FRAMED_SPRITE) {
-            Color tint = ep->sprite_tint;
-
-            if(ep->flags & ENTITY_FLAG_USE_DAMAGE_BLINK_TINT) {
-              if(ep->damage_blink_high) {
-                tint = ep->damage_blink_sprite_tint;
-              }
-            }
-
-            Vector2 pos =
-            {
-              ep->pos.x - 0.5*(float)ep->sprite_frame_rec.width*ep->sprite_scale,
-              ep->pos.y - 0.5*(float)ep->sprite_frame_rec.height*ep->sprite_scale,
-            };
-
-            Rectangle source = ep->sprite_frame_rec;
-
-            if(ep->flags & ENTITY_FLAG_FLIP_SPRITE) {
-              source.width *= -1;
-            }
-
-            Rectangle dest =
-            {
-              .x = pos.x, .y = pos.y,
-              .width = ep->sprite_frame_rec.width * ep->sprite_scale,
-              .height = ep->sprite_frame_rec.height * ep->sprite_scale,
-            };
-            Vector2 origin = {0};
-
-            DrawTexturePro(ep->sprite, source, dest, origin, 0, tint);
           }
 
           if(ep->flags & ENTITY_FLAG_DRAW_TEXT) {
@@ -1154,7 +1163,7 @@ update_end:;
             DrawTextEx(gp->font, ep->text, pos, ep->font_size, ep->font_spacing, ep->text_color);
           }
 
-          if(ep->flags & ENTITY_FLAG_DRAW_BOUNDS) {
+          if(ep->flags & ENTITY_FLAG_DRAW_BOUNDS || gp->debug_flags & GAME_DEBUG_FLAG_DRAW_ALL_ENTITY_BOUNDS) {
             Rectangle rec =
             {
               ep->pos.x - ep->half_size.x,
@@ -1163,7 +1172,7 @@ update_end:;
               2 * ep->half_size.y,
             };
 
-            DrawRectangleLinesEx(rec, 1.0, ep->bounds_color);
+            DrawRectangleLinesEx(rec, 2.0, ep->bounds_color);
           }
 
           if(ep->flags & ENTITY_FLAG_FILL_BOUNDS) {
@@ -1192,16 +1201,8 @@ update_end:;
           continue;
         }
 
-        {
-          Vector2 pos = Vector2Subtract(p->pos, Vector2Scale(p->half_size, p->sprite_scale));
-          Rectangle dest =
-          {
-            .x = pos.x, .y = pos.y,
-            .width = p->frame_rec.width * p->sprite_scale,
-            .height = p->frame_rec.height * p->sprite_scale,
-          };
-          Vector2 origin = {0};
-          DrawTexturePro(p->sprite, p->frame_rec, dest, origin, 0, WHITE);
+        if(p->flags & PARTICLE_FLAG_HAS_SPRITE) {
+          draw_sprite_ex(gp, p->sprite, p->pos, p->sprite_scale, 0, WHITE);
         }
 
       }
@@ -1212,36 +1213,32 @@ update_end:;
 
       /* player health */
       if(gp->player && gp->player->live && gp->player->kind == ENTITY_KIND_PLAYER) {
-        Rectangle rec =
-        {
-          0, 0,
-          32, 32,
-        };
-        const float scale = 1.0;
-        const float spacing = 5.0;
-        const float width = rec.width * scale + spacing;
+        const float scale = PLAYER_HEALTH_ICON_SPRITE_SCALE;
+        const float spacing = 3.2;
+        const float width = 32 * scale + spacing;
 
-        Rectangle dest =
+        // TODO easily access sprite size
+
+        Vector2 pos =
         {
-          .x = (float)WINDOW_WIDTH - width,
-          .y = spacing,
-          .width = rec.width * scale,
-          .height = rec.height * scale
+          .x = (float)WINDOW_WIDTH - width + 16 * scale,
+          .y = 16 * scale + spacing,
         };
-        Vector2 origin = {0};
 
         for(int i = 0; i < gp->player->health; i++) {
-          DrawTexturePro(gp->player_texture, rec, dest, origin, 0, WHITE);
-          dest.x -= width;
+          draw_sprite_ex(gp, SPRITE_SHIP_HEALTH_ICON, pos, scale, 0.0f, WHITE);
+          pos.x -= width;
         }
+
       }
 
       if(gp->state > GAME_STATE_TITLE_SCREEN) {
-        char *score_num_str = game_frame_scratch_alloc(gp, 64);
-        stbsp_sprintf(score_num_str, "%li", gp->score);
+        Str8 score_num_str = push_str8f(&gp->frame_scratch, "%li", gp->score);
         int w = MeasureText("SCORE", SCORE_LABEL_FONT_SIZE);
-        DrawText("SCORE", 10, 10, SCORE_LABEL_FONT_SIZE, RAYWHITE);
-        DrawText(score_num_str, 10 + w + 10, 10, SCORE_LABEL_FONT_SIZE, RED);
+        Vector2 pos = { 10, 10 };
+        DrawTextEx(gp->font, "SCORE", pos, SCORE_LABEL_FONT_SIZE, SCORE_LABEL_FONT_SIZE/10.0f, RAYWHITE);
+        pos.x += w + 10;
+        DrawTextEx(gp->font, (char*)score_num_str.s, pos, SCORE_LABEL_FONT_SIZE, SCORE_LABEL_FONT_SIZE/10.0f, RED);
       }
 
       if(gp->state == GAME_STATE_GAME_OVER && gp->show_game_over_banner) {
@@ -1269,7 +1266,7 @@ update_end:;
           char *resume_hint_banner = "press any key to resume";
           int resume_hint_banner_w = MeasureText(resume_hint_banner, RESUME_HINT_FONT_SIZE);
 
-          DrawText(resume_hint_banner, ((float)WINDOW_WIDTH - (float)resume_hint_banner_w) * 0.5, (float)WINDOW_HEIGHT * 0.56, RESUME_HINT_FONT_SIZE, RESUME_HINT_COLOR);
+          DrawText(resume_hint_banner, ((float)WINDOW_WIDTH - (float)resume_hint_banner_w) * 0.5, (float)WINDOW_HEIGHT * 0.50, RESUME_HINT_FONT_SIZE, RESUME_HINT_COLOR);
         }
 
       }

@@ -606,6 +606,19 @@ STBSP__PUBLICDEF int STB_SPRINTF_DECORATE(vsprintfcb)(STBSP_SPRINTFCB *callback,
          // copy the string in
          goto scopy;
 
+         //  -jfd: my custom Str8 format
+      case 'S':
+         {
+           Str8 str = va_arg(va, Str8);
+           s = (char*)str.s;
+           l = (u32)str.len;
+           lead[0] = 0;
+           tail[0] = 0;
+           pr = 0;
+           dp = 0;
+           cs = 0;
+         } goto scopy;
+
       case 'c': // char
          // get the character
          s = num + STBSP__NUMSZ - 1;

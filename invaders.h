@@ -5,18 +5,23 @@
 #include <raymath.h>
 #include <rlgl.h>
 #include "basic.h"
-#include "stb_sprintf.h"
 #include "arena.h"
+#include "str.h"
+#include "array.h"
+#include "sprite.h"
+#include "stb_sprintf.h"
 
 
 /* constants */
+// TODO make the simulated velocities and sizes resolution independant
 
 #define TARGET_FPS 60
 
-#define WINDOW_WIDTH  1200
-#define WINDOW_HEIGHT 900
+#define WINDOW_SCALE 512
+#define WINDOW_WIDTH  (4*WINDOW_SCALE)
+#define WINDOW_HEIGHT (3*WINDOW_SCALE)
 
-#define WINDOW_RECT (Rectangle){0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}
+#define WINDOW_RECT ((Rectangle){0, 0, WINDOW_WIDTH, WINDOW_HEIGHT})
 
 #define MAX_ENTITIES 2048
 #define MAX_PARTICLES 128
@@ -25,33 +30,31 @@
 
 #define MAX_ENTITIES_PER_FORMATION 36
 
-#define BACKGROUND_SCROLL_SPEED ((float)200.0)
+#define BACKGROUND_SCROLL_SPEED ((float)100.0)
 
 #define FRICTION ((float)40.0)
 
-#define TITLE_BANNER_INITIAL_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 0.22 }
-#define TITLE_BANNER_FONT_SIZE ((float)88.0f)
-#define TITLE_BANNER_FONT_SPACING ((float)8.8f)
-#define TITLE_BANNER_COLOR (Color){ 245, 245, 245, 255 }
-#define TITLE_BANNER_SCROLL_SPEED ((float)300)
+#define TITLE_BANNER_INITIAL_POS ((Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 0.22 })
+#define TITLE_BANNER_FONT_SIZE ((float)120.0f)
+#define TITLE_BANNER_FONT_SPACING ((float)12.0f)
+#define TITLE_BANNER_COLOR ((Color){ 245, 245, 245, 255 })
+#define TITLE_BANNER_SCROLL_SPEED ((float)320)
 #define TITLE_BANNER_MIN_Y ((float)-120)
 
-#define TITLE_HINT_INITIAL_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 0.33 }
-#define TITLE_HINT_FONT_SIZE ((float)18.8f)
-#define TITLE_HINT_FONT_SPACING ((float)1.88f)
-#define TITLE_HINT_COLOR (Color){ 245, 245, 245, 205 }
+#define TITLE_HINT_INITIAL_POS ((Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 0.32 })
+#define TITLE_HINT_FONT_SIZE ((float)30.0f)
+#define TITLE_HINT_FONT_SPACING ((float)3.00f)
+#define TITLE_HINT_COLOR ((Color){ 245, 245, 245, 205 })
 #define TITLE_HINT_BLINK_PERIOD ((float)0.66)
 
-#define PLAYER_INITIAL_OFFSCREEN_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 1.3f }
+#define PLAYER_INITIAL_OFFSCREEN_POS ((Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 1.3f })
 #define PLAYER_MAIN_Y ((float)WINDOW_HEIGHT * 0.87f)
 #define PLAYER_ENTER_VIEW_SPEED ((float)400)
-#define PLAYER_ACCEL ((float)1.5e4)
+#define PLAYER_ACCEL ((float)1.6e4)
 
-#define PLAYER_BOUNDS_SIZE (Vector2){ 40, 50 }
-#define PLAYER_SPRITE_FRAME_REC (Rectangle){ 0, 0, 32, 32 }
-#define PLAYER_SPRITE_SCALE ((float)2.0f)
-#define PLAYER_SPRITE_TOTAL_FRAMES 3
-#define PLAYER_SPRITE_FRAME_SPEED 8
+#define PLAYER_BOUNDS_SIZE ((Vector2){ 60, 70 })
+#define PLAYER_SPRITE_SCALE ((float)3.0f)
+#define PLAYER_HEALTH_ICON_SPRITE_SCALE ((float)2.0f)
 
 #define PLAYER_DAMAGE_BLINK_PERIOD ((float)0.03f)
 #define PLAYER_DAMAGE_BLINK_TOTAL_TIME ((float)1.2f)
@@ -61,15 +64,12 @@
 #define PLAYER_HEALTH 4
 
 #define PLAYER_MISSILE_COLOR RED
-#define PLAYER_MISSILE_SIZE (Vector2){ 6, 20 }
-#define PLAYER_MISSILE_SPAWN_OFFSET (Vector2){ 0, -PLAYER_MISSILE_SIZE.y }
-#define PLAYER_MISSILE_VELOCITY (Vector2){ 0, -1300 }
-#define PLAYER_MISSILE_COLLISION_MASK (Entity_kind_mask)(ENTITY_KIND_MASK_INVADER | 0)
+#define PLAYER_MISSILE_SIZE ((Vector2){ 10, 24 })
+#define PLAYER_MISSILE_SPAWN_OFFSET ((Vector2){ 0, -0.5f*(PLAYER_MISSILE_SIZE.y + PLAYER_BOUNDS_SIZE.y) })
+#define PLAYER_MISSILE_VELOCITY ((Vector2){ 0, -1200 })
+#define PLAYER_MISSILE_COLLISION_MASK ((Entity_kind_mask)(ENTITY_KIND_MASK_INVADER | 0))
 #define PLAYER_MISSILE_DAMAGE 1
-#define PLAYER_MISSILE_SPRITE_SCALE ((float)3.2f)
-#define PLAYER_MISSILE_SPRITE_FRAME_REC (Rectangle){ 0, 0, 32, 32 }
-#define PLAYER_MISSILE_SPRITE_TOTAL_FRAMES 3
-#define PLAYER_MISSILE_SPRITE_FRAME_SPEED 20
+#define PLAYER_MISSILE_SPRITE_SCALE ((float)3.0f)
 
 #define WAVE_TRANSITION_PRE_DELAY_TIME ((float)0.6f)
 #define WAVE_TRANSITION_POST_DELAY_TIME ((float)0.3f)
@@ -77,44 +77,47 @@
 #define WAVE_TRANSITION_RAMP_ACCEL ((float)520.0f)
 #define WAVE_TRANSITION_BANNER_TIME ((float)2.0f)
 
-#define WAVE_BANNER_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 0.4 }
-#define WAVE_BANNER_FONT_SIZE ((float)58.8f)
-#define WAVE_BANNER_FONT_SPACING ((float)5.88f)
-#define WAVE_BANNER_COLOR (Color){ 245, 245, 245, 255 }
+#define WAVE_BANNER_POS ((Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * 0.4 })
+#define WAVE_BANNER_FONT_SIZE ((float)80.0f)
+#define WAVE_BANNER_FONT_SPACING ((float)8.0f)
+#define WAVE_BANNER_COLOR ((Color){ 245, 245, 245, 255 })
 
 #define ENEMY_FORMATION_ROWS 3
 #define ENEMY_FORMATION_COLS 7
-#define ENEMY_FORMATION_SPACING (Vector2){ 50.0f, 25.0f }
-#define ENEMY_FORMATION_INITIAL_POS (Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * -0.35 }
-#define ENEMY_FORMATION_MAIN_Y ((float)WINDOW_HEIGHT * 0.16)
-#define ENEMY_FORMATION_STRAFE_VEL_X ((float)150.0f)
+#define ENEMY_FORMATION_SPACING ((Vector2){ 60.0f, 28.0f })
+#define ENEMY_FORMATION_INITIAL_POS ((Vector2){ (float)WINDOW_WIDTH * 0.5, (float)WINDOW_HEIGHT * -0.35 })
+#define ENEMY_FORMATION_MAIN_Y ((float)WINDOW_HEIGHT * 0.18)
+#define ENEMY_FORMATION_STRAFE_VEL_X ((float)220.0f)
 #define ENEMY_FORMATION_ENTER_LEVEL_SPEED ((float)300)
 #define ENEMY_FORMATION_STRAFE_PADDING ((float)15.0)
 
-#define INVADER_MISSILE_COOLDOWN ((float)0.2f)
+#define INVADER_HEALTH 1
 #define INVADER_TOTAL_SHOOTING_TIME_LONG ((float)0.8f)
 #define INVADER_TOTAL_SHOOTING_TIME_SHORT ((float)0.2f)
-#define INVADER_MISSILE_SIZE (Vector2){ 6, 20 }
-#define INVADER_MISSILE_COLOR (Color){ 0, 216, 70, 255 }
-#define INVADER_MISSILE_SPAWN_OFFSET (Vector2){ 0, INVADER_MISSILE_SIZE.y }
-#define INVADER_MISSILE_VELOCITY (Vector2){ 0, 900 }
-#define INVADER_MISSILE_COLLISION_MASK (Entity_kind_mask)(ENTITY_KIND_MASK_PLAYER | 0)
+#define INVADER_SPRITE_SCALE ((float)2.5f)
+
+#define INVADER_BOUNDS_SIZE ((Vector2){ 55, 60 })
+
+#define INVADER_MISSILE_COOLDOWN ((float)0.2f)
+#define INVADER_MISSILE_SIZE ((Vector2){ 16, 30 })
+#define INVADER_MISSILE_COLOR ((Color){ 0, 216, 70, 255 })
+#define INVADER_MISSILE_SPAWN_OFFSET ((Vector2){ 0, 0.5f*(INVADER_MISSILE_SIZE.y + INVADER_BOUNDS_SIZE.y) })
+#define INVADER_MISSILE_VELOCITY ((Vector2){ 0, 820 })
+#define INVADER_MISSILE_COLLISION_MASK ((Entity_kind_mask)(ENTITY_KIND_MASK_PLAYER | 0))
 #define INVADER_MISSILE_DAMAGE 1
-#define INVADER_HEALTH 1
-#define INVADER_MISSILE_SPRITE_SCALE ((float)2.2f)
-#define INVADER_MISSILE_SPRITE_FRAME_REC (Rectangle){ 0, 0, 32, 32 }
-#define INVADER_MISSILE_SPRITE_TOTAL_FRAMES 3
-#define INVADER_MISSILE_SPRITE_FRAME_SPEED 20
+#define INVADER_MISSILE_SPRITE_SCALE ((float)3.0f)
 
-#define SCORE_LABEL_FONT_SIZE ((float)30.0f)
+#define ORANGE_EXPLOSION_SCALE ((float)3.0f)
 
-#define GAME_OVER_BANNER_FONT_SIZE ((float)70.0f)
+#define SCORE_LABEL_FONT_SIZE ((float)40.0f)
+
+#define GAME_OVER_BANNER_FONT_SIZE ((float)100.0f)
 #define GAME_OVER_BANNER_PRE_DELAY ((float)1.7f)
 
-#define PAUSE_BANNER_FONT_SIZE ((float)90.0f)
+#define PAUSE_BANNER_FONT_SIZE ((float)100.0f)
 #define PAUSE_BANNER_COLOR (Color){ 245, 245, 245, 255 }
 
-#define RESUME_HINT_FONT_SIZE ((float)20.0f)
+#define RESUME_HINT_FONT_SIZE ((float)30.0f)
 #define RESUME_HINT_COLOR (Color){ 245, 245, 245, 205 }
 #define RESUME_HINT_BLINK_PERIOD ((float)0.66)
 
@@ -168,15 +171,11 @@
   X(CLAMP_POS_TO_SCREEN)             \
   X(HAS_MISSILE_LAUNCHER)            \
   X(HAS_PARTICLE_EMITTER)            \
-  X(DO_MOVE_ANIMATION)               \
+  X(HAS_SPRITE)                      \
   X(APPLY_COLLISION_DAMAGE)          \
   X(RECEIVE_COLLISION_DAMAGE)        \
-  X(ANIMATE_SPRITE)                  \
   X(BLINK_TEXT)                      \
   X(DRAW_TEXT)                       \
-  X(FLIP_SPRITE)                     \
-  X(DRAW_SPRITE)                     \
-  X(DRAW_FRAMED_SPRITE)              \
   X(USE_DAMAGE_BLINK_TINT)           \
   X(DRAW_BOUNDS)                     \
   X(FILL_BOUNDS)                     \
@@ -189,19 +188,9 @@
   X(MISSILE)                       \
 
 #define PARTICLE_FLAGS            \
-  X(HAS_SPRITE_ANIM)              \
+  X(HAS_SPRITE)                   \
   X(DIE_WHEN_ANIM_FINISH)         \
   X(MULTIPLE_ANIM_CYCLES)         \
-
-#define ANIM_TAGS                 \
-  X(NONE)                         \
-
-#define ANIM_FRAME_TAGS           \
-  X(NONE)                         \
-
-#define ANIM_PLAYER_FLAGS         \
-  X(REVERSED)                     \
-  X(CYCLE)                        \
 
 
 /* type definitions */
@@ -212,16 +201,11 @@ typedef struct Entity Entity;
 typedef struct Missile_launcher Missile_launcher;
 typedef struct Particle_emitter Particle_emitter;
 typedef struct Particle Particle;
-typedef struct Sprite Sprite;
-typedef struct Anim_frame Anim_frame;
-typedef struct Anim Anim;
-typedef struct Anim_player Anim_player;
-typedef U64 Particle_flags;
-typedef U64 Game_flags;
-typedef U64 Game_debug_flags;
-typedef U64 Entity_flags;
-typedef U64 Entity_kind_mask;
-typedef U64 Anim_player_flags;
+typedef u64 Particle_flags;
+typedef u64 Game_flags;
+typedef u64 Game_debug_flags;
+typedef u64 Entity_flags;
+typedef u64 Entity_kind_mask;
 
 typedef enum Game_state {
 #define X(state) GAME_STATE_##state,
@@ -244,7 +228,7 @@ typedef enum Game_flag_index {
     GAME_FLAG_INDEX_MAX,
 } Game_flag_index;
 
-STATIC_ASSERT(GAME_FLAG_INDEX_MAX < 64, number_of_game_flags_is_less_then_64);
+STATIC_ASSERT(GAME_FLAG_INDEX_MAX < 64, number_of_game_flags_is_less_than_64);
 
 #define X(flag) const Game_flags GAME_FLAG_##flag = (Game_flags)(1ull<<GAME_FLAG_INDEX_##flag);
 GAME_FLAGS
@@ -258,7 +242,7 @@ typedef enum Game_debug_flag_index {
     GAME_DEBUG_FLAG_INDEX_MAX,
 } Game_debug_flag_index;
 
-STATIC_ASSERT(GAME_DEBUG_FLAG_INDEX_MAX < 64, number_of_game_debug_flags_is_less_then_64);
+STATIC_ASSERT(GAME_DEBUG_FLAG_INDEX_MAX < 64, number_of_game_debug_flags_is_less_than_64);
 
 #define X(flag) const Game_debug_flags GAME_DEBUG_FLAG_##flag = (Game_debug_flags)(1ull<<GAME_DEBUG_FLAG_INDEX_##flag);
 GAME_DEBUG_FLAGS
@@ -276,7 +260,7 @@ typedef enum Entity_kind {
 ENTITY_KINDS
 #undef X
 
-STATIC_ASSERT(ENTITY_KIND_MAX < 64, number_of_entity_kinds_is_less_then_64);
+STATIC_ASSERT(ENTITY_KIND_MAX < 64, number_of_entity_kinds_is_less_than_64);
 
 typedef enum Entity_order {
   ENTITY_ORDER_INVALID = -1,
@@ -306,7 +290,7 @@ typedef enum Entity_flag_index {
 ENTITY_FLAGS
 #undef X
 
-STATIC_ASSERT(ENTITY_FLAG_INDEX_MAX < 64, number_of_entity_flags_is_less_then_64);
+STATIC_ASSERT(ENTITY_FLAG_INDEX_MAX < 64, number_of_entity_flags_is_less_than_64);
 
 typedef enum Particle_flag_index {
   PARTICLE_FLAG_INDEX_INVALID = -1,
@@ -320,72 +304,10 @@ typedef enum Particle_flag_index {
 PARTICLE_FLAGS
 #undef X
 
-STATIC_ASSERT(PARTICLE_FLAG_INDEX_MAX < 64, number_of_particle_flags_is_less_then_64);
-
-typedef enum Anim_tag {
-  ANIM_TAG_INVALID = -1,
-#define X(tag) ANIM_TAG_##tag,
-  ANIM_TAGS
-#undef X
-    ANIM_TAG_MAX,
-} Anim_tag;
-
-typedef enum Anim_frame_tag {
-  ANIM_FRAME_TAG_INVALID = -1,
-#define X(tag) ANIM_FRAME_TAG_##tag,
-  ANIM_FRAME_TAGS
-#undef X
-    ANIM_FRAME_TAG_MAX,
-} Anim_frame_tag;
-
-typedef enum Anim_player_flag_index {
-  ANIM_PLAYER_FLAG_INDEX_INVALID = -1,
-#define X(flag) ANIM_PLAYER_FLAG_INDEX_##flag,
-  ANIM_PLAYER_FLAGS
-#undef X
-    ANIM_PLAYER_FLAG_INDEX_MAX,
-} Anim_player_flag_index;
-
-#define X(flag) const Anim_player_flags ANIM_PLAYER_FLAG_##flag = (Anim_player_flags)(1ull<<ANIM_PLAYER_FLAG_INDEX_##flag);
-ANIM_PLAYER_FLAGS
-#undef X
-
-STATIC_ASSERT(ANIM_PLAYER_FLAG_INDEX_MAX < 64, number_of_anim_player_flags_is_less_then_64);
+STATIC_ASSERT(PARTICLE_FLAG_INDEX_MAX < 64, number_of_particle_flags_is_less_than_64);
 
 
 /* struct bodies */
-
-struct Sprite {
-  int texture_index;
-  int x;
-  int y;
-  int w;
-  int h;
-};
-
-struct Anim_frame {
-  Anim_frame_tag tag;
-  int sprite_index;
-};
-
-struct Anim {
-  Anim_tag tag;
-
-  Anim_frame *frames;
-
-  int  total_frames;
-  int  fps;
-};
-
-struct Anim_player {
-  Anim_player_flags flags;
-
-  Anim cur_anim;
-  int  cur_frame;
-  int  frame_counter;
-
-  Sprite *dest_sprite;
-};
 
 struct Missile_launcher {
   Entity_flags missile_entity_flags;
@@ -397,27 +319,22 @@ struct Missile_launcher {
 
   Color   missile_color;
 
-  Texture2D sprite;
+  Sprite sprite;
   Color     sprite_tint;
   float     sprite_scale;
-  Rectangle sprite_frame_rec;
-  int       total_frames;
-  int       frame_counter;
-  int       frame_speed;
-  int       cur_frame;
 
   Sound *missile_sound;
 
   Entity_kind_mask collision_mask;
   int              damage_amount;
 
-  U32     shooting;
+  u32     shooting;
   float   cooldown_period;
   float   cooldown_timer;
 };
 
 struct Particle {
-  U32 live;
+  u32 live;
 
   Particle_flags flags;
 
@@ -425,7 +342,7 @@ struct Particle {
   Vector2 vel;
   Vector2 half_size;
 
-  Texture2D sprite;
+  Sprite sprite;
   Color     sprite_tint;
   float     sprite_scale;
 
@@ -443,7 +360,7 @@ struct Particle_emitter {
 };
 
 struct Entity {
-  U32 live;
+  b32 live;
 
   Entity_kind    kind;
   Entity_order   update_order;
@@ -451,7 +368,7 @@ struct Entity {
   Entity_control control;
   Entity_flags   flags;
 
-  U64 genid;
+  u64 genid;
 
   Vector2 accel;
   Vector2 vel;
@@ -462,7 +379,7 @@ struct Entity {
   Color fill_color;
 
   Vector2 formation_slot_size;
-  U64     formation_id;
+  u64     formation_id;
 
   Missile_launcher missile_launcher;
 
@@ -479,15 +396,9 @@ struct Entity {
 
   Particle_emitter particle_emitter;
 
-  Texture2D sprite;
+  Sprite sprite;
   Color     sprite_tint;
   float     sprite_scale;
-  Rectangle sprite_frame_rec;
-
-  int       total_frames;
-  int       frame_counter;
-  int       frame_speed;
-  int       cur_frame;
 
   float damage_blink_timer;
   float damage_blink_period;
@@ -525,27 +436,28 @@ struct Game {
   Game_flags       flags;
   Game_debug_flags debug_flags;
 
-  U64 frame_index;
+  u64 frame_index;
 
   Arena frame_scratch;
 
   char wave_banner_buf[256];
 
   Entity  entities[MAX_ENTITIES];
-  S64     entities_allocated;
+  s64     entities_allocated;
   Entity *entity_free_list;
 
-  S64     save_entities_allocated;
+  s64     save_entities_allocated;
   Entity *save_entity_free_list;
 
   Particle particles[MAX_PARTICLES];
-  S64      particles_buf_pos;
+  s64      particles_buf_pos;
 
-  S64 live_entities;
+  s64 live_entities;
+  s64 live_particles;
 
-  S64 live_missiles;
+  s64 live_missiles;
 
-  S64 score;
+  s64 score;
 
   Player_input player_input;
 
@@ -554,11 +466,11 @@ struct Game {
   Entity *wave_banner;
   Entity *player;
 
-  U64 player_genid;
+  u64 player_genid;
 
   Entity *enemy_formation;
 
-  U64 current_formation_id;
+  u64 current_formation_id;
 
   Font font;
 
@@ -569,12 +481,7 @@ struct Game {
   float     background_y_offset;
   float     background_scroll_speed;
   Texture2D background_texture;
-  Texture2D player_texture;
-  Texture2D invader_texture;
-  Texture2D invader_plasma_shot_anim;
-  Texture2D orange_explosion_anim;
-  Texture2D player_missile_sprite_sheet;
-  Texture2D invader_plasma_missile_sprite_sheet;
+  Texture2D sprite_atlas;
 
   Sound invader_missile_sound;
   Sound player_missile_sound;
@@ -618,8 +525,12 @@ void entity_init_title_screen_hint_text(Game *gp, Entity *ep);
 void entity_init_player(Game *gp, Entity *ep);
 void entity_init_wave_banner(Game *gp, Entity *ep);
 void entity_init_enemy_formation(Game *gp, Entity *ep);
-void entity_init_invader_in_formation(Game *gp, Entity *ep, U64 formation_id, Vector2 initial_pos);
+void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Vector2 initial_pos);
 void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher launcher);
+
+void sprite_update(Game *gp, Sprite *sp);
+void draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint);
+void draw_sprite_ex(Game *gp, Sprite sp, Vector2 pos, f32 scale, f32 rotation, Color tint);
 
 void particle_emit(Game *gp, Particle_emitter emitter);
 

@@ -4,6 +4,7 @@
 
 #include "basic.h"
 #include "arena.h"
+#include "str.h"
 
 
 #define JSON_VALUE_KINDS         \
@@ -41,11 +42,11 @@ struct JSON_value {
   JSON_value *value;
 
   Str8 str;
-  B32  boolean;
-  S64  integer;
-  F64  floating;
-  S64  array_length;
-  S64  object_child_count;
+  b32  boolean;
+  s64  integer;
+  f64  floating;
+  s64  array_length;
+  s64  object_child_count;
 
   JSON_value *parent;
   JSON_value *next;
@@ -54,17 +55,17 @@ struct JSON_value {
 
 struct JSON_parser {
   Arena *arena;
-  U8    *src;
-  U8    *pos;
-  U8    *end;
-  S64    src_len;
+  u8    *src;
+  u8    *pos;
+  u8    *end;
+  s64    src_len;
   int    err;
 
   JSON_value *root;
 };
 
 
-void        json_init_parser(JSON_parser *p, Arena *arena, U8 *src, S64 src_len);
+void        json_init_parser(JSON_parser *p, Arena *arena, u8 *src, s64 src_len);
 JSON_value* json_alloc_value(JSON_parser *p);
 Str8        json_dump_to_str8(Arena *arena, JSON_value *root);
 JSON_value* json_parse(JSON_parser *p);
@@ -86,7 +87,7 @@ Str8        json_parse_raw_string(JSON_parser *p);
 
 #ifdef JLIB_JSON_IMPLEMENTATION
 
-void json_init_parser(JSON_parser *p, Arena *arena, U8 *src, S64 src_len) {
+void json_init_parser(JSON_parser *p, Arena *arena, u8 *src, s64 src_len) {
   p->arena = arena;
   p->src = src;
   p->src_len = src_len;
@@ -97,7 +98,7 @@ void json_init_parser(JSON_parser *p, Arena *arena, U8 *src, S64 src_len) {
 }
 
 INLINE JSON_value* json_alloc_value(JSON_parser *p) {
-  assert(p->arena);
+  ASSERT(p->arena);
   return arena_alloc(p->arena, sizeof(JSON_value));
 }
 
@@ -145,7 +146,7 @@ JSON_value* json_parse_object(JSON_parser *p) {
   JSON_value *list = &head;
 
 
-  S64 object_child_count = 0;
+  s64 object_child_count = 0;
   for(;p->pos < p->end && *p->pos != '}'; object_child_count++) {
     json_parse_skip_whitespace(p);
 
@@ -222,7 +223,7 @@ JSON_value* json_parse_array(JSON_parser *p) {
   JSON_value head;
   JSON_value *list = &head;
 
-  S64 array_length = 0;
+  s64 array_length = 0;
   for(;p->pos < p->end && *p->pos != ']'; array_length++) {
     JSON_value *element_value = json_parse_value(p);
 
@@ -306,9 +307,9 @@ Str8 json_parse_raw_string(JSON_parser *p) {
   }
   p->pos++;
 
-  U8 *begin = p->pos;
+  u8 *begin = p->pos;
 
-  U8 *end = begin;
+  u8 *end = begin;
 
   while(end < p->end && *end != '"') {
     if(*end == '\\') end++;
@@ -324,13 +325,13 @@ Str8 json_parse_raw_string(JSON_parser *p) {
     return (Str8){0};
   }
 
-  S64 len = (S64)(end - begin);
-  Str8 result = { .d = (U8*)arena_alloc(p->arena, (U64)len), .len = len };
-  U8 *src = begin;
-  S64 r = 0;
-  S64 w = 0;
-  S64 n = (S64)(end - begin);
-  assert(n >= 0);
+  s64 len = (s64)(end - begin);
+  Str8 result = { .s = (u8*)arena_alloc(p->arena, (u64)len), .len = len };
+  u8 *src = begin;
+  s64 r = 0;
+  s64 w = 0;
+  s64 n = (s64)(end - begin);
+  ASSERT(n >= 0);
 
   while(r < n) {
     if(src[r] == '\\') {
@@ -339,28 +340,28 @@ Str8 json_parse_raw_string(JSON_parser *p) {
 
       switch(c) {
         case '"':
-          result.d[w] = '"';
+          result.s[w] = '"';
           break;
         case '\\':
-          result.d[w] = '\\';
+          result.s[w] = '\\';
           break;
         case '/':
-          result.d[w] = '/';
+          result.s[w] = '/';
           break;
         case 'b':
-          result.d[w] = '\b';
+          result.s[w] = '\b';
           break;
         case 'f':
-          result.d[w] = '\f';
+          result.s[w] = '\f';
           break;
         case 'n':
-          result.d[w] = '\n';
+          result.s[w] = '\n';
           break;
         case 'r':
-          result.d[w] = '\r';
+          result.s[w] = '\r';
           break;
         case 't':
-          result.d[w] = '\t';
+          result.s[w] = '\t';
           break;
         case 'u':
           {
@@ -368,7 +369,7 @@ Str8 json_parse_raw_string(JSON_parser *p) {
           } break;
       }
     } else {
-      result.d[w] = src[r++];
+      result.s[w] = src[r++];
     }
 
     w++;
@@ -383,18 +384,18 @@ Str8 json_parse_raw_string(JSON_parser *p) {
 }
 
 JSON_value* json_parse_number(JSON_parser *p) {
-  U8 *end = NULL;
-  F64 floating = strtod((char*)p->pos, (char**)&end);
+  u8 *end = NULL;
+  f64 floating = strtod((char*)p->pos, (char**)&end);
 
   if(floating == 0.0f && end == p->pos) {
     return NULL;
   }
 
-  assert(end > p->pos);
+  ASSERT(end > p->pos);
 
   JSON_value *result = json_alloc_value(p);
   result->kind = JSON_VALUE_KIND_NUMBER;
-  result->integer = (S64)floating;
+  result->integer = (s64)floating;
   result->floating = floating;
 
   p->pos = end;
