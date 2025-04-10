@@ -7,8 +7,7 @@
 
 #define SPRITE_FLAGS              \
   X(STILL)                        \
-  X(DIR_FORWARD)                  \
-  X(DIR_REVERSE)                  \
+  X(REVERSE)                      \
   X(PINGPONG)                     \
   X(INFINITE_REPEAT)              \
   X(DRAW_MIRRORED_X)              \
@@ -24,9 +23,9 @@ typedef enum Sprite_flag_index {
     SPRITE_FLAG_INDEX_MAX,
 } Sprite_flag_index;
 
-STATIC_ASSERT(SPRITE_FLAG_INDEX_MAX < 32, number_of_sprite_flags_is_less_than_32);
+STATIC_ASSERT(SPRITE_FLAG_INDEX_MAX < 64, number_of_sprite_flags_is_less_than_64);
 
-typedef u32 Sprite_flags;
+typedef u64 Sprite_flags;
 #define X(flag) const Sprite_flags SPRITE_FLAG_##flag = (Sprite_flags)(1u << SPRITE_FLAG_INDEX_##flag);
 SPRITE_FLAGS
 #undef X
@@ -58,7 +57,8 @@ struct Sprite {
   s32 fps;
   s32 total_frames;
 
-  s32 cur_frame; /* this is relative to the first_frame */
+  s32 cur_frame; /* this is relative to the first_frame or last_frame depending on the animation direction */
+  s32 abs_cur_frame; /* this is the absolute frame index */
   s32 frame_counter;
   s32 repeats; /* number of times to play the sprite's animation */
 };

@@ -8,7 +8,7 @@
 
 /* globals */
 
-bool player_is_taking_damage = false;
+b8 player_is_taking_damage = false;
 
 /* function bodies */
 
@@ -294,11 +294,7 @@ void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher la
 }
 
 void sprite_update(Game *gp, Sprite *sp) {
-  if(sp->flags & SPRITE_FLAG_STILL) {
-    return;
-  }
-
-  if(sp->flags & SPRITE_FLAG_DIR_FORWARD) {
+  if(!(sp->flags & SPRITE_FLAG_STILL)) {
 
     if(sp->cur_frame < sp->total_frames) {
       sp->frame_counter++;
@@ -314,7 +310,7 @@ void sprite_update(Game *gp, Sprite *sp) {
       if(sp->flags & SPRITE_FLAG_INFINITE_REPEAT) {
         if(sp->flags & SPRITE_FLAG_PINGPONG) {
           sp->cur_frame--;
-          sp->flags ^= SPRITE_FLAG_DIR_FORWARD | SPRITE_FLAG_DIR_REVERSE;
+          sp->flags ^= SPRITE_FLAG_REVERSE;
         } else {
           sp->cur_frame = 0;
         }
@@ -325,35 +321,13 @@ void sprite_update(Game *gp, Sprite *sp) {
       }
     }
 
-  } else if(sp->flags & SPRITE_FLAG_DIR_REVERSE) {
-
-    if(sp->cur_frame >= 0) {
-      sp->frame_counter++;
-
-      if(sp->frame_counter >= (TARGET_FPS / sp->fps)) {
-        sp->frame_counter = 0;
-        sp->cur_frame--;
-      }
-
-    }
-
-    if(sp->cur_frame < 0) {
-      if(sp->flags & SPRITE_FLAG_INFINITE_REPEAT) {
-        if(sp->flags & SPRITE_FLAG_PINGPONG) {
-          sp->cur_frame++;
-          sp->flags ^= SPRITE_FLAG_DIR_FORWARD | SPRITE_FLAG_DIR_REVERSE;
-        } else {
-          sp->cur_frame = sp->total_frames - 1;
-        }
-      } else {
-        sp->cur_frame++;
-        sp->flags |= SPRITE_FLAG_AT_LAST_FRAME | SPRITE_FLAG_STILL;
-        ASSERT(sp->cur_frame >= 0 && sp->cur_frame < sp->total_frames);
-      }
-    }
-
   }
 
+  if(sp->flags & SPRITE_FLAG_REVERSE) {
+    sp->abs_cur_frame = sp->last_frame - sp->cur_frame;
+  } else {
+    sp->abs_cur_frame = sp->first_frame + sp->cur_frame;
+  }
 
 }
 
@@ -364,7 +338,7 @@ INLINE void draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint) {
 void draw_sprite_ex(Game *gp, Sprite sp, Vector2 pos, f32 scale, f32 rotation, Color tint) {
   ASSERT(sp.cur_frame >= 0 && sp.cur_frame < sp.total_frames);
 
-  Sprite_frame frame = __sprite_frames[sp.cur_frame + sp.first_frame];
+  Sprite_frame frame = __sprite_frames[sp.abs_cur_frame];
 
   Rectangle source_rec =
   {
@@ -383,11 +357,11 @@ void draw_sprite_ex(Game *gp, Sprite sp, Vector2 pos, f32 scale, f32 rotation, C
   };
 
   if(sp.flags & SPRITE_FLAG_DRAW_MIRRORED_X) {
-    dest_rec.width *= -1;
+    source_rec.width *= -1;
   }
 
   if(sp.flags & SPRITE_FLAG_DRAW_MIRRORED_Y) {
-    dest_rec.height *= -1;
+    source_rec.height *= -1;
   }
 
   DrawTexturePro(gp->sprite_atlas, source_rec, dest_rec, (Vector2){0}, rotation, tint);
@@ -799,19 +773,38 @@ void game_update_and_draw(Game *gp) {
 
                 ep->accel = (Vector2){0};
 
-                ep->sprite = SPRITE_SHIP_IDLE;
-
                 if(gp->player_input.move_left) {
-                  // TODO move animations
-                  ep->accel.x += -PLAYER_ACCEL;
+                  ep->accel.x = -PLAYER_ACCEL;
+
+                  if(!(ep->flags & ENTITY_FLAG_MOVING)) {
+                    ep->sprite = SPRITE_SHIP_STRAFE;
+                    ep->sprite.flags |= SPRITE_FLAG_DRAW_MIRRORED_X;
+                    ep->flags |= ENTITY_FLAG_MOVING;
+                  }
+
                 } else if(gp->player_input.stop_move_left) {
+                  ep->accel = (Vector2){0};
                   ep->vel.x = 0;
+                  ep->sprite = SPRITE_SHIP_STRAFE;
+                  ep->sprite.flags |= SPRITE_FLAG_REVERSE;
+                  ep->sprite.flags |= SPRITE_FLAG_DRAW_MIRRORED_X;
+                  ep->flags &= ~ENTITY_FLAG_MOVING;
                 }
 
                 if(gp->player_input.move_right) {
                   ep->accel.x += PLAYER_ACCEL;
+
+                  if(!(ep->flags & ENTITY_FLAG_MOVING)) {
+                    ep->sprite = SPRITE_SHIP_STRAFE;
+                    ep->flags |= ENTITY_FLAG_MOVING;
+                  }
+
                 } else if(gp->player_input.stop_move_right) {
+                  ep->accel = (Vector2){0};
                   ep->vel.x = 0;
+                  ep->sprite = SPRITE_SHIP_STRAFE;
+                  ep->sprite.flags |= SPRITE_FLAG_REVERSE;
+                  ep->flags &= ~ENTITY_FLAG_MOVING;
                 }
 
 #if 0
@@ -1225,8 +1218,11 @@ update_end:;
           .y = 16 * scale + spacing,
         };
 
+        Sprite sp = SPRITE_SHIP_HEALTH_ICON;
+        ASSERT(sp.flags & SPRITE_FLAG_STILL);
+        sp.abs_cur_frame = sp.first_frame + sp.cur_frame;
         for(int i = 0; i < gp->player->health; i++) {
-          draw_sprite_ex(gp, SPRITE_SHIP_HEALTH_ICON, pos, scale, 0.0f, WHITE);
+          draw_sprite_ex(gp, sp, pos, scale, 0.0f, WHITE);
           pos.x -= width;
         }
 

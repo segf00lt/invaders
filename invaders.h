@@ -172,6 +172,7 @@
   X(HAS_MISSILE_LAUNCHER)            \
   X(HAS_PARTICLE_EMITTER)            \
   X(HAS_SPRITE)                      \
+  X(MOVING)                          \
   X(APPLY_COLLISION_DAMAGE)          \
   X(RECEIVE_COLLISION_DAMAGE)        \
   X(BLINK_TEXT)                      \
