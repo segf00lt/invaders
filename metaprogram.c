@@ -636,13 +636,12 @@ int main(void) {
         if(tag.to == tag.from) {
           sprites_code =
             push_str8f(&code_arena,
-                "%Sconst Sprite SPRITE_%S_%S = { .flags = SPRITE_FLAG_STILL, .abs_cur_frame = %li, .first_frame = %li, .last_frame = %li, .total_frames = 1 };\n",
-                sprites_code, str8_to_upper(&code_arena, tag.file_title), str8_to_upper(&code_arena, tag.tag_name), tag_first_frame, tag_first_frame, tag_last_frame);
+                "%Sconst Sprite SPRITE_%S_%S = { .flags = SPRITE_FLAG_STILL, .first_frame = %li, .last_frame = %li, .total_frames = 1 };\n",
+                sprites_code, str8_to_upper(&code_arena, tag.file_title), str8_to_upper(&code_arena, tag.tag_name), tag_first_frame, tag_last_frame);
         } else {
           s64 fps = 1000/atlas->frames[range.first_frame].duration;
 
           Str8 flags_str = {0};
-          b8 reverse = 0;
 
           switch(tag.direction) {
             case ASEPRITE_ANIM_DIR_FORWARD:
@@ -652,7 +651,6 @@ int main(void) {
             case ASEPRITE_ANIM_DIR_REVERSE:
               {
                 flags_str = str8_lit("SPRITE_FLAG_REVERSE");
-                reverse = 1;
               } break;
             case ASEPRITE_ANIM_DIR_PINGPONG:
               {
@@ -661,7 +659,6 @@ int main(void) {
             case ASEPRITE_ANIM_DIR_PINGPONG_REVERSE:
               {
                 flags_str = str8_lit("SPRITE_FLAG_PINGPONG | SPRITE_FLAG_REVERSE");
-                reverse = 1;
               } break;
           }
 
@@ -671,8 +668,8 @@ int main(void) {
 
           sprites_code =
             push_str8f(&code_arena,
-                "%Sconst Sprite SPRITE_%S_%S = { .flags = %S, .abs_cur_frame = %li, .first_frame = %li, .last_frame = %li, .fps = %li, .total_frames = %li };\n",
-                sprites_code, str8_to_upper(&code_arena, tag.file_title), str8_to_upper(&code_arena, tag.tag_name), flags_str, reverse ? tag_first_frame : tag_last_frame, tag_first_frame, tag_last_frame, fps, tag_last_frame - tag_first_frame + 1);
+                "%Sconst Sprite SPRITE_%S_%S = { .flags = %S, .first_frame = %li, .last_frame = %li, .fps = %li, .total_frames = %li };\n",
+                sprites_code, str8_to_upper(&code_arena, tag.file_title), str8_to_upper(&code_arena, tag.tag_name), flags_str, tag_first_frame, tag_last_frame, fps, tag_last_frame - tag_first_frame + 1);
         }
 
       }
@@ -694,8 +691,8 @@ int main(void) {
         if(range.first_frame == range.last_frame) {
           sprites_code =
             push_str8f(&code_arena,
-                "%Sconst Sprite SPRITE_%S = { .flags = SPRITE_FLAG_STILL, .abs_cur_frame = %li, .first_frame = %li, .last_frame = %li, .total_frames = 1 };\n",
-                sprites_code, str8_to_upper(&code_arena, range.file_title), range.first_frame, range.first_frame, range.last_frame);
+                "%Sconst Sprite SPRITE_%S = { .flags = SPRITE_FLAG_STILL, .first_frame = %li, .last_frame = %li, .total_frames = 1 };\n",
+                sprites_code, str8_to_upper(&code_arena, range.file_title), range.first_frame, range.last_frame);
         } else {
 
           for(s64 fi = range.first_frame; fi < range.last_frame; fi++) {
@@ -710,8 +707,8 @@ int main(void) {
 
           sprites_code =
             push_str8f(&code_arena,
-                "%Sconst Sprite SPRITE_%S = { .flags = SPRITE_FLAG_INFINITE_REPEAT, .abs_cur_frame = %li, .first_frame = %li, .last_frame = %li, .fps = %li, .total_frames = %li };\n",
-                sprites_code, str8_to_upper(&code_arena, range.file_title), range.first_frame, range.first_frame, range.last_frame, fps, range.last_frame - range.first_frame + 1);
+                "%Sconst Sprite SPRITE_%S = { .flags = SPRITE_FLAG_INFINITE_REPEAT, .first_frame = %li, .last_frame = %li, .fps = %li, .total_frames = %li };\n",
+                sprites_code, str8_to_upper(&code_arena, range.file_title), range.first_frame, range.last_frame, fps, range.last_frame - range.first_frame + 1);
         }
 
       }

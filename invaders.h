@@ -26,7 +26,7 @@
 #define MAX_ENTITIES 2048
 #define MAX_PARTICLES 128
 
-#define MAX_SHOOTING_INVADERS_PER_FORMATION 3
+#define MAX_SHOOTING_INVADERS_PER_FORMATION 7
 
 #define MAX_ENTITIES_PER_FORMATION 36
 
@@ -92,13 +92,15 @@
 #define ENEMY_FORMATION_STRAFE_PADDING ((float)15.0)
 
 #define INVADER_HEALTH 1
-#define INVADER_TOTAL_SHOOTING_TIME_LONG ((float)0.8f)
-#define INVADER_TOTAL_SHOOTING_TIME_SHORT ((float)0.2f)
+#define INVADER_TOTAL_SHOOTING_TIME_LONG ((float)0.9f)
+#define INVADER_TOTAL_SHOOTING_TIME_SHORT ((float)0.3f)
+#define INVADER_WAIT_AFTER_SHOOTING_TIME_LONG ((float)1.8f)
+#define INVADER_WAIT_AFTER_SHOOTING_TIME_SHORT ((float)0.9f)
 #define INVADER_SPRITE_SCALE ((float)2.5f)
 
 #define INVADER_BOUNDS_SIZE ((Vector2){ 55, 60 })
 
-#define INVADER_MISSILE_COOLDOWN ((float)0.2f)
+#define INVADER_MISSILE_COOLDOWN ((float)0.3f)
 #define INVADER_MISSILE_SIZE ((Vector2){ 16, 30 })
 #define INVADER_MISSILE_COLOR ((Color){ 0, 216, 70, 255 })
 #define INVADER_MISSILE_SPAWN_OFFSET ((Vector2){ 0, 0.5f*(INVADER_MISSILE_SIZE.y + INVADER_BOUNDS_SIZE.y) })
@@ -125,7 +127,7 @@
 
 /* macros */
 
-#define EntityKindInMask(kind, mask) (!!(mask & (1ull<<kind)))
+#define entity_kind_in_mask(kind, mask) (!!(mask & (1ull<<kind)))
 
 
 /* tables */
@@ -161,7 +163,6 @@
   X(FIRST)              \
   X(LAST)               \
 
-// TODO find a use for APPLY_COLLISION
 #define ENTITY_FLAGS                 \
   X(DYNAMICS)                        \
   X(APPLY_FRICTION)                  \
@@ -321,10 +322,10 @@ struct Missile_launcher {
   Color   missile_color;
 
   Sprite sprite;
-  Color     sprite_tint;
-  float     sprite_scale;
+  Color  sprite_tint;
+  float  sprite_scale;
 
-  Sound *missile_sound;
+  Sound  *missile_sound;
 
   Entity_kind_mask collision_mask;
   int              damage_amount;
@@ -382,15 +383,19 @@ struct Entity {
   Vector2 formation_slot_size;
   u64     formation_id;
 
+  float formation_trigger_enemy_shoot_delay;
+
   Missile_launcher missile_launcher;
 
   Entity_kind_mask collision_mask;
 
   int              damage_amount;
 
-  Sound *missile_sound;
+  Sound missile_sound;
 
   float enemy_total_shooting_time;
+  float enemy_wait_after_shooting_time;
+  b32   enemy_do_spit_animation;
 
   int health;
   int received_damage;
@@ -530,6 +535,7 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Ve
 void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher launcher);
 
 void sprite_update(Game *gp, Sprite *sp);
+b32  sprite_at_keyframe(Sprite sp, s32 keyframe);
 void draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint);
 void draw_sprite_ex(Game *gp, Sprite sp, Vector2 pos, f32 scale, f32 rotation, Color tint);
 

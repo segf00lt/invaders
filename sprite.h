@@ -58,7 +58,6 @@ struct Sprite {
   s32 total_frames;
 
   s32 cur_frame; /* this is relative to the first_frame or last_frame depending on the animation direction */
-  s32 abs_cur_frame; /* this is the absolute frame index */
   s32 frame_counter;
   s32 repeats; /* number of times to play the sprite's animation */
 };

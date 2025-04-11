@@ -276,7 +276,7 @@ void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher la
   ep->collision_mask = launcher.collision_mask;
   ep->damage_amount = launcher.damage_amount;
 
-  ep->missile_sound = launcher.missile_sound;
+  ep->missile_sound = *launcher.missile_sound;
 
   ep->pos = Vector2Add(launcher.initial_pos, launcher.spawn_offset);
 
@@ -293,8 +293,10 @@ void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher la
     Vector2Scale(launcher.missile_size, 0.5);
 }
 
-void sprite_update(Game *gp, Sprite *sp) {
+INLINE void sprite_update(Game *gp, Sprite *sp) {
   if(!(sp->flags & SPRITE_FLAG_STILL)) {
+
+    ASSERT(sp->fps > 0);
 
     if(sp->cur_frame < sp->total_frames) {
       sp->frame_counter++;
@@ -323,12 +325,22 @@ void sprite_update(Game *gp, Sprite *sp) {
 
   }
 
-  if(sp->flags & SPRITE_FLAG_REVERSE) {
-    sp->abs_cur_frame = sp->last_frame - sp->cur_frame;
-  } else {
-    sp->abs_cur_frame = sp->first_frame + sp->cur_frame;
+}
+
+INLINE b32 sprite_at_keyframe(Sprite sp, s32 keyframe) {
+  b32 result = 0;
+
+  s32 abs_cur_frame = sp.first_frame + sp.cur_frame;
+
+  if(sp.flags & SPRITE_FLAG_REVERSE) {
+    abs_cur_frame = sp.last_frame - sp.cur_frame;
   }
 
+  if(abs_cur_frame == keyframe) {
+    result = 1;
+  }
+
+  return result;
 }
 
 INLINE void draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint) {
@@ -338,7 +350,13 @@ INLINE void draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint) {
 void draw_sprite_ex(Game *gp, Sprite sp, Vector2 pos, f32 scale, f32 rotation, Color tint) {
   ASSERT(sp.cur_frame >= 0 && sp.cur_frame < sp.total_frames);
 
-  Sprite_frame frame = __sprite_frames[sp.abs_cur_frame];
+  Sprite_frame frame;
+
+  if(sp.flags & SPRITE_FLAG_REVERSE) {
+    frame = __sprite_frames[sp.last_frame - sp.cur_frame];
+  } else {
+    frame = __sprite_frames[sp.first_frame + sp.cur_frame];
+  }
 
   Rectangle source_rec =
   {
@@ -454,11 +472,47 @@ void game_update_and_draw(Game *gp) {
 
     if(IsKeyPressed(KEY_ESCAPE)) {
       if(gp->state != GAME_STATE_NONE && gp->state != GAME_STATE_TITLE_SCREEN && gp->state != GAME_STATE_GAME_OVER) {
+
         if(!(gp->flags & GAME_FLAG_PAUSE)) {
           gp->resume_hint_blink_high = 1;
           gp->resume_hint_blink_timer = 0;
+
+          //PauseSound(gp->invader_missile_sound);
+          PauseSound(gp->player_missile_sound);
+          PauseSound(gp->invader_die_sound);
+          PauseSound(gp->player_damage_sound);
+          PauseSound(gp->player_die_sound);
+          PauseSound(gp->wave_banner_sound);
+          PauseSound(gp->hyperspace_jump_sound);
+
+          for(int i = 0; i < MAX_ENTITIES; i++) {
+            Entity *ep = &gp->entities[i];
+            if(IsSoundValid(ep->missile_sound)) {
+              PauseSound(ep->missile_sound);
+            }
+          }
+
+        } else {
+
+          //ResumeSound(gp->invader_missile_sound);
+          ResumeSound(gp->player_missile_sound);
+          ResumeSound(gp->invader_die_sound);
+          ResumeSound(gp->player_damage_sound);
+          ResumeSound(gp->player_die_sound);
+          ResumeSound(gp->wave_banner_sound);
+          ResumeSound(gp->hyperspace_jump_sound);
+
+          for(int i = 0; i < MAX_ENTITIES; i++) {
+            Entity *ep = &gp->entities[i];
+            if(IsSoundValid(ep->missile_sound)) {
+              ResumeSound(ep->missile_sound);
+            }
+          }
+
         }
+
         gp->flags ^= GAME_FLAG_PAUSE;
+
       }
     }
 
@@ -891,28 +945,37 @@ void game_update_and_draw(Game *gp) {
 
                 for(int i = 0; i < enemies_count; i++) {
                   enemies[i]->vel = ep->vel;
+                  if(enemies[i]->enemy_do_spit_animation || enemies[i]->missile_launcher.shooting || enemies[i]->enemy_total_shooting_time > 0) {
+                    number_of_shooting_invaders++;
+                  }
                 }
 
+                // TODO refactor how enemy formations work
                 if(enemies_count > 0) {
-                  while(number_of_shooting_invaders < MAX_SHOOTING_INVADERS_PER_FORMATION && number_of_shooting_invaders < enemies_count) {
-                    int index = GetRandomValue(0, enemies_count - 1);
 
-                    Entity *check = enemies[index];
+                  if(ep->formation_trigger_enemy_shoot_delay > 0) {
+                    ep->formation_trigger_enemy_shoot_delay -= gp->timestep;
+                  } else {
+                    ep->formation_trigger_enemy_shoot_delay = 0;
 
-                    if(!check->missile_launcher.shooting) {
-                      number_of_shooting_invaders++;
-                      if(FloatEquals(check->missile_launcher.cooldown_timer, 0.0f) && GetRandomValue(0, 1) != 0) {
-                        check->missile_launcher.shooting = 1;
+                    if(gp->state != GAME_STATE_GAME_OVER) {
+                      if(number_of_shooting_invaders < MAX_SHOOTING_INVADERS_PER_FORMATION && number_of_shooting_invaders < enemies_count) {
+                        int index = GetRandomValue(0, enemies_count - 1);
 
-                        if(GetRandomValue(0, 1) == 0) {
-                          check->enemy_total_shooting_time = INVADER_TOTAL_SHOOTING_TIME_LONG;
-                        } else {
-                          check->enemy_total_shooting_time = INVADER_TOTAL_SHOOTING_TIME_SHORT;
+                        Entity *check = enemies[index];
+
+                        number_of_shooting_invaders++;
+                        if(!check->enemy_do_spit_animation && !check->missile_launcher.shooting) {
+                          if(FloatEquals(check->enemy_wait_after_shooting_time, 0.0f) && GetRandomValue(0, 1) != 0) {
+                            ep->formation_trigger_enemy_shoot_delay = 0.16f * (float)GetRandomValue(1, 3);
+                            check->enemy_do_spit_animation = 1;
+                          }
                         }
+
                       }
                     }
-
                   }
+
                 } else {
                   entity_die(gp, ep);
                   goto entity_update_end;
@@ -944,11 +1007,42 @@ void game_update_and_draw(Game *gp) {
                   goto entity_update_end;
                 }
 
-                if(ep->enemy_total_shooting_time <= 0) {
-                  ep->missile_launcher.shooting = 0;
-                  ep->enemy_total_shooting_time = 0;
+                if(ep->enemy_do_spit_animation) {
+                  ep->enemy_do_spit_animation = 0;
+                  ep->sprite = SPRITE_INVADER_SPITTING;
+
+                  if(GetRandomValue(0, 1) == 0) {
+                    ep->enemy_total_shooting_time = INVADER_TOTAL_SHOOTING_TIME_LONG;
+                  } else {
+                    ep->enemy_total_shooting_time = INVADER_TOTAL_SHOOTING_TIME_SHORT;
+                  }
+                }
+
+                if(sprite_at_keyframe(ep->sprite, SPRITE_KEYFRAME_INVADER_SPIT_FIRED)) {
+                  ep->missile_launcher.shooting = 1;
+                  ep->sprite.flags |= SPRITE_FLAG_STILL;
+
+                  if(ep->enemy_total_shooting_time < 0) {
+                    ep->missile_launcher.shooting = 0;
+                    ep->enemy_total_shooting_time = 0;
+                    ep->sprite = SPRITE_INVADER_IDLE;
+
+                    if(GetRandomValue(0, 1) == 0) {
+                      ep->enemy_wait_after_shooting_time = INVADER_WAIT_AFTER_SHOOTING_TIME_LONG;
+                    } else {
+                      ep->enemy_wait_after_shooting_time = INVADER_WAIT_AFTER_SHOOTING_TIME_SHORT;
+                    }
+
+                  } else {
+                    ep->enemy_total_shooting_time -= gp->timestep;
+                  }
+
+                }
+
+                if(ep->enemy_wait_after_shooting_time < 0) {
+                  ep->enemy_wait_after_shooting_time = 0;
                 } else {
-                  ep->enemy_total_shooting_time -= gp->timestep;
+                  ep->enemy_wait_after_shooting_time -= gp->timestep;
                 }
 
               } break;
@@ -1012,7 +1106,7 @@ void game_update_and_draw(Game *gp) {
                 };
 
                 if(CheckCollisionRecs(ep_rec, colliding_entity_rec)) {
-                  if(EntityKindInMask(colliding_entity->kind, ep->collision_mask)) {
+                  if(entity_kind_in_mask(colliding_entity->kind, ep->collision_mask)) {
                     applied_collision = true;
                     colliding_entities[colliding_entities_count++] = colliding_entity;
                   }
@@ -1055,8 +1149,7 @@ void game_update_and_draw(Game *gp) {
                     Entity *missile = entity_spawn(gp);
                     ep->missile_launcher.initial_pos = ep->pos;
                     entity_init_missile_from_launcher(gp, missile, ep->missile_launcher);
-                    ASSERT(missile->missile_sound);
-                    PlaySound(*missile->missile_sound);
+                    PlaySound(missile->missile_sound);
                   }
                 }
 
@@ -1218,11 +1311,8 @@ update_end:;
           .y = 16 * scale + spacing,
         };
 
-        Sprite sp = SPRITE_SHIP_HEALTH_ICON;
-        ASSERT(sp.flags & SPRITE_FLAG_STILL);
-        sp.abs_cur_frame = sp.first_frame + sp.cur_frame;
         for(int i = 0; i < gp->player->health; i++) {
-          draw_sprite_ex(gp, sp, pos, scale, 0.0f, WHITE);
+          draw_sprite_ex(gp, SPRITE_SHIP_HEALTH_ICON, pos, scale, 0.0f, WHITE);
           pos.x -= width;
         }
 
@@ -1304,6 +1394,7 @@ update_end:;
         "frame time: %.7f\n"
         "live entities count: %li\n"
         "most entities allocated: %li\n"
+        "live particles count: %li\n"
         "particle_buf_pos: %i\n"
         "screen width: %i\n"
         "screen height: %i\n"
@@ -1315,6 +1406,7 @@ update_end:;
           gp->timestep,
           gp->live_entities,
           gp->entities_allocated,
+          gp->live_particles,
           gp->particles_buf_pos,
           GetScreenWidth(),
           GetScreenHeight(),
