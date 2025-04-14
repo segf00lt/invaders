@@ -17,7 +17,7 @@
 
 #define TARGET_FPS 60
 
-#define WINDOW_SCALE 512
+#define WINDOW_SCALE 400
 #define WINDOW_WIDTH  (4*WINDOW_SCALE)
 #define WINDOW_HEIGHT (3*WINDOW_SCALE)
 
@@ -26,7 +26,7 @@
 #define MAX_ENTITIES 2048
 #define MAX_PARTICLES 128
 
-#define MAX_SHOOTING_INVADERS_PER_FORMATION 7
+#define MAX_SHOOTING_INVADERS_PER_FORMATION 3
 
 #define MAX_ENTITIES_PER_FORMATION 36
 
@@ -64,12 +64,12 @@
 #define PLAYER_HEALTH 4
 
 #define PLAYER_MISSILE_COLOR RED
-#define PLAYER_MISSILE_SIZE ((Vector2){ 10, 24 })
+#define PLAYER_MISSILE_SIZE ((Vector2){ 14, 32 })
 #define PLAYER_MISSILE_SPAWN_OFFSET ((Vector2){ 0, -0.5f*(PLAYER_MISSILE_SIZE.y + PLAYER_BOUNDS_SIZE.y) })
 #define PLAYER_MISSILE_VELOCITY ((Vector2){ 0, -1200 })
 #define PLAYER_MISSILE_COLLISION_MASK ((Entity_kind_mask)(ENTITY_KIND_MASK_INVADER | 0))
 #define PLAYER_MISSILE_DAMAGE 1
-#define PLAYER_MISSILE_SPRITE_SCALE ((float)3.0f)
+#define PLAYER_MISSILE_SPRITE_SCALE ((float)4.0f)
 
 #define WAVE_TRANSITION_PRE_DELAY_TIME ((float)0.6f)
 #define WAVE_TRANSITION_POST_DELAY_TIME ((float)0.3f)
@@ -92,13 +92,13 @@
 #define ENEMY_FORMATION_STRAFE_PADDING ((float)15.0)
 
 #define INVADER_HEALTH 1
-#define INVADER_TOTAL_SHOOTING_TIME_LONG ((float)0.9f)
-#define INVADER_TOTAL_SHOOTING_TIME_SHORT ((float)0.3f)
-#define INVADER_WAIT_AFTER_SHOOTING_TIME_LONG ((float)1.8f)
-#define INVADER_WAIT_AFTER_SHOOTING_TIME_SHORT ((float)0.9f)
-#define INVADER_SPRITE_SCALE ((float)2.5f)
+#define INVADER_TOTAL_SHOOTING_TIME_LONG ((float)0.11f)
+#define INVADER_TOTAL_SHOOTING_TIME_SHORT ((float)0.5f)
+#define INVADER_WAIT_AFTER_SHOOTING_TIME_LONG ((float)2.4f)
+#define INVADER_WAIT_AFTER_SHOOTING_TIME_SHORT ((float)1.5f)
+#define INVADER_SPRITE_SCALE ((float)3.0f)
 
-#define INVADER_BOUNDS_SIZE ((Vector2){ 55, 60 })
+#define INVADER_BOUNDS_SIZE ((Vector2){ 85, 90 })
 
 #define INVADER_MISSILE_COOLDOWN ((float)0.3f)
 #define INVADER_MISSILE_SIZE ((Vector2){ 16, 30 })
@@ -123,6 +123,8 @@
 #define RESUME_HINT_COLOR (Color){ 245, 245, 245, 205 }
 #define RESUME_HINT_BLINK_PERIOD ((float)0.66)
 
+#define ORANGE_FIRE_PARTICLE_SPRITE_SCALE ((float)2.0f)
+#define PURPLE_FIRE_PARTICLE_SPRITE_SCALE ((float)3.0f)
 
 
 /* macros */
@@ -311,6 +313,26 @@ STATIC_ASSERT(PARTICLE_FLAG_INDEX_MAX < 64, number_of_particle_flags_is_less_tha
 
 /* struct bodies */
 
+struct Particle {
+  u32 live;
+
+  Particle_flags flags;
+
+  Vector2 pos;
+  Vector2 vel;
+  Vector2 half_size;
+
+  Sprite    sprite;
+  Color     sprite_tint;
+  float     sprite_scale;
+};
+
+struct Particle_emitter {
+  int emit_count;
+
+  Particle particle;
+};
+
 struct Missile_launcher {
   Entity_flags missile_entity_flags;
 
@@ -330,35 +352,11 @@ struct Missile_launcher {
   Entity_kind_mask collision_mask;
   int              damage_amount;
 
+  Particle_emitter particle_emitter;
+
   u32     shooting;
   float   cooldown_period;
   float   cooldown_timer;
-};
-
-struct Particle {
-  u32 live;
-
-  Particle_flags flags;
-
-  Vector2 pos;
-  Vector2 vel;
-  Vector2 half_size;
-
-  Sprite sprite;
-  Color     sprite_tint;
-  float     sprite_scale;
-
-  Rectangle frame_rec;
-  int       total_frames;
-  int       frame_counter;
-  int       frame_speed;
-  int       cur_frame;
-};
-
-struct Particle_emitter {
-  int emit_count;
-
-  Particle particle;
 };
 
 struct Entity {
@@ -534,10 +532,11 @@ void entity_init_enemy_formation(Game *gp, Entity *ep);
 void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Vector2 initial_pos);
 void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher launcher);
 
-void sprite_update(Game *gp, Sprite *sp);
-b32  sprite_at_keyframe(Sprite sp, s32 keyframe);
-void draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint);
-void draw_sprite_ex(Game *gp, Sprite sp, Vector2 pos, f32 scale, f32 rotation, Color tint);
+void         sprite_update(Game *gp, Sprite *sp);
+Sprite_frame sprite_current_frame(Sprite sp);
+b32          sprite_at_keyframe(Sprite sp, s32 keyframe);
+void         draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint);
+void         draw_sprite_ex(Game *gp, Sprite sp, Vector2 pos, f32 scale, f32 rotation, Color tint);
 
 void particle_emit(Game *gp, Particle_emitter emitter);
 

@@ -49,6 +49,8 @@ int main(void) {
   InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "invaders");
   InitAudioDevice();
 
+  SetMasterVolume(GetMasterVolume() * 0.5);
+
   SetTargetFPS(TARGET_FPS);
   SetTextLineSpacing(10);
   SetTraceLogLevel(LOG_DEBUG);

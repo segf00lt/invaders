@@ -11,6 +11,6 @@ metaprogram
 *.dSYM
 tags
 vgcore*
-aseprite/*
-*.aseprite
+aseprite/atlas.json
+aseprite/atlas.png
 *.log
