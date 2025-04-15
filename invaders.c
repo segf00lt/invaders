@@ -93,6 +93,8 @@ void entity_init_player(Game *gp, Entity *ep) {
     ENTITY_FLAG_DYNAMICS |
     ENTITY_FLAG_RECEIVE_COLLISION |
     ENTITY_FLAG_APPLY_FRICTION |
+    ENTITY_FLAG_APPLY_COLLISION |
+    ENTITY_FLAG_APPLY_COLLISION_DAMAGE |
     ENTITY_FLAG_HAS_SPRITE |
     ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE |
     ENTITY_FLAG_HAS_MISSILE_LAUNCHER |
@@ -144,6 +146,9 @@ void entity_init_player(Game *gp, Entity *ep) {
   ep->sprite = SPRITE_SHIP_IDLE;
   ep->sprite_tint = WHITE;
   ep->sprite_scale = PLAYER_SPRITE_SCALE;
+
+  ep->collision_mask = PLAYER_COLLISION_MASK;
+  ep->damage_amount = 1;
 
   ep->bounds_color = RED;
 
@@ -1474,12 +1479,14 @@ update_end:;
             }
 
             if(ep->flags & ENTITY_FLAG_HAS_SHIELDS) {
+              Color begin = YELLOW;
               float freq = SHIELDS_COLOR_ANIMATE_FREQ;
               if(ep->shields_time >= SHIELDS_TIME * 0.77) {
                 freq *= 2.0;
+                begin = WHITE;
               }
               float t = Normalize(sinf(ep->shields_time*freq), -1, 1);
-              tint = ColorLerp(MAGENTA, YELLOW, t);
+              tint = ColorLerp(begin, MAGENTA, t);
             }
 
             draw_sprite_ex(gp, ep->sprite, ep->pos, ep->sprite_scale, 0, tint);

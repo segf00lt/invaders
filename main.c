@@ -46,7 +46,7 @@ void unload_assets(Game *gp) {
 
 int main(void) {
   SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-  InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "invaders");
+  InitWindow(1000, 800, "invaders");
   InitAudioDevice();
 
   SetMasterVolume(GetMasterVolume() * 0.5);
