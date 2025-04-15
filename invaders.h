@@ -67,7 +67,8 @@
 #define PLAYER_MISSILE_SIZE ((Vector2){ 14, 32 })
 #define PLAYER_MISSILE_SPAWN_OFFSET ((Vector2){ 0, -0.5f*(PLAYER_MISSILE_SIZE.y + PLAYER_BOUNDS_SIZE.y) })
 #define PLAYER_MISSILE_VELOCITY ((Vector2){ 0, -1200 })
-#define PLAYER_MISSILE_COLLISION_MASK ((Entity_kind_mask)(ENTITY_KIND_MASK_INVADER | 0))
+#define PLAYER_MISSILE_COLLISION_MASK \
+  ((Entity_kind_mask)(ENTITY_KIND_MASK_INVADER | ENTITY_KIND_MASK_HEALTH_PACK | ENTITY_KIND_MASK_SHIELDS_PICKUP | 0))
 #define PLAYER_MISSILE_DAMAGE 1
 #define PLAYER_MISSILE_SPRITE_SCALE ((float)4.0f)
 
@@ -108,6 +109,19 @@
 #define INVADER_MISSILE_COLLISION_MASK ((Entity_kind_mask)(ENTITY_KIND_MASK_PLAYER | 0))
 #define INVADER_MISSILE_DAMAGE 1
 #define INVADER_MISSILE_SPRITE_SCALE ((float)3.0f)
+
+#define HEALTH_PACK_SIZE ((Vector2){ 50, 50 })
+#define HEALTH_PACK_INITIAL_Y ((float)-80.0f)
+#define HEALTH_PACK_VELOCITY ((Vector2){ 0, 200 })
+#define HEALTH_PACK_SPRITE_SCALE ((float)5.0f)
+
+#define SHIELDS_PICKUP_SIZE ((Vector2){ 60, 60 })
+#define SHIELDS_PICKUP_INITIAL_Y ((float)-80.0f)
+#define SHIELDS_PICKUP_VELOCITY ((Vector2){ 0, 480 })
+#define SHIELDS_PICKUP_SPRITE_SCALE ((float)2.0f)
+
+#define SHIELDS_TIME ((float)7.0f)
+#define SHIELDS_COLOR_ANIMATE_FREQ ((float)40.0f)
 
 #define ORANGE_EXPLOSION_SCALE ((float)3.0f)
 
@@ -160,6 +174,8 @@
   X(FORMATION)          \
   X(MISSILE)            \
   X(BANNER)             \
+  X(HEALTH_PACK)        \
+  X(SHIELDS_PICKUP)     \
 
 #define ENTITY_ORDERS   \
   X(FIRST)              \
@@ -172,6 +188,7 @@
   X(RECEIVE_COLLISION)               \
   X(DIE_ON_APPLY_COLLISION)          \
   X(CLAMP_POS_TO_SCREEN)             \
+  X(HAS_SHIELDS)                     \
   X(HAS_MISSILE_LAUNCHER)            \
   X(HAS_PARTICLE_EMITTER)            \
   X(HAS_SPRITE)                      \
@@ -190,6 +207,8 @@
   X(ENEMY_FORMATION_MAIN)          \
   X(INVADER_IN_FORMATION)          \
   X(MISSILE)                       \
+  X(HEALTH_PACK)                   \
+  X(SHIELDS_PICKUP)                \
 
 #define PARTICLE_FLAGS            \
   X(HAS_SPRITE)                   \
@@ -398,6 +417,8 @@ struct Entity {
   int health;
   int received_damage;
 
+  float shields_time;
+
   Particle_emitter particle_emitter;
 
   Sprite sprite;
@@ -495,6 +516,9 @@ struct Game {
   Sound wave_banner_sound;
   Sound hyperspace_jump_sound;
 
+  float time_since_last_health_spawned;
+  float time_since_last_shields_spawned;
+
   float wave_transition_pre_delay_timer;
   float wave_transition_post_delay_timer;
   float wave_transition_ramp_timer;
@@ -531,6 +555,8 @@ void entity_init_wave_banner(Game *gp, Entity *ep);
 void entity_init_enemy_formation(Game *gp, Entity *ep);
 void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Vector2 initial_pos);
 void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher launcher);
+void entity_init_health_pack(Game *gp, Entity *ep);
+void entity_init_shields_pickup(Game *gp, Entity *ep);
 
 void         sprite_update(Game *gp, Sprite *sp);
 Sprite_frame sprite_current_frame(Sprite sp);

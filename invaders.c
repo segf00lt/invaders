@@ -219,7 +219,7 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Ve
   ep->formation_id = formation_id;
 
   ep->update_order = ENTITY_ORDER_LAST;
-  ep->draw_order = ENTITY_ORDER_LAST;
+  ep->draw_order = ENTITY_ORDER_FIRST;
 
   ep->missile_launcher =
     (Missile_launcher){
@@ -324,6 +324,76 @@ void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher la
 
   ep->half_size =
     Vector2Scale(launcher.missile_size, 0.5);
+}
+
+void entity_init_health_pack(Game *gp, Entity *ep) {
+  ep->kind = ENTITY_KIND_HEALTH_PACK;
+
+  ep->flags =
+    ENTITY_FLAG_DYNAMICS |
+    ENTITY_FLAG_RECEIVE_COLLISION |
+    ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE |
+    ENTITY_FLAG_HAS_SPRITE |
+    //ENTITY_FLAG_FILL_BOUNDS |
+    //ENTITY_FLAG_DRAW_BOUNDS |
+    0;
+
+  ep->control = ENTITY_CONTROL_HEALTH_PACK;
+
+  ep->update_order = ENTITY_ORDER_LAST;
+  ep->draw_order = ENTITY_ORDER_LAST;
+
+  ep->pos =
+    (Vector2) {
+      .x = (float)GetRandomValue(HEALTH_PACK_SIZE.x, WINDOW_WIDTH - HEALTH_PACK_SIZE.x),
+      .y = HEALTH_PACK_INITIAL_Y,
+    };
+
+  ep->vel = HEALTH_PACK_VELOCITY;
+
+  ep->bounds_color = RED;
+
+  ep->sprite = SPRITE_HEALTH;
+  ep->sprite_tint = WHITE;
+  ep->sprite_scale = HEALTH_PACK_SPRITE_SCALE;
+
+  ep->half_size =
+    Vector2Scale(HEALTH_PACK_SIZE, 0.5);
+}
+
+void entity_init_shields_pickup(Game *gp, Entity *ep) {
+  ep->kind = ENTITY_KIND_SHIELDS_PICKUP;
+
+  ep->flags =
+    ENTITY_FLAG_DYNAMICS |
+    ENTITY_FLAG_RECEIVE_COLLISION |
+    ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE |
+    ENTITY_FLAG_HAS_SPRITE |
+    //ENTITY_FLAG_FILL_BOUNDS |
+    //ENTITY_FLAG_DRAW_BOUNDS |
+    0;
+
+  ep->control = ENTITY_CONTROL_SHIELDS_PICKUP;
+
+  ep->update_order = ENTITY_ORDER_LAST;
+  ep->draw_order = ENTITY_ORDER_LAST;
+
+  ep->pos =
+    (Vector2) {
+      .x = (float)GetRandomValue(SHIELDS_PICKUP_SIZE.x, WINDOW_WIDTH - SHIELDS_PICKUP_SIZE.x),
+      .y = SHIELDS_PICKUP_INITIAL_Y,
+    };
+
+  ep->vel = SHIELDS_PICKUP_VELOCITY;
+
+  ep->bounds_color = RED;
+
+  ep->sprite = SPRITE_SHIELDS_PICKUP;
+  ep->sprite_tint = WHITE;
+  ep->sprite_scale = SHIELDS_PICKUP_SPRITE_SCALE;
+
+  ep->half_size =
+    Vector2Scale(SHIELDS_PICKUP_SIZE, 0.5);
 }
 
 INLINE void sprite_update(Game *gp, Sprite *sp) {
@@ -757,7 +827,8 @@ void game_update_and_draw(Game *gp) {
       case GAME_STATE_MAIN_LOOP:
         {
           bool player_is_alive = false;
-          bool all_enemies_are_dead = true;
+          bool advance_to_next_wave = true;
+          int live_enemies = 0;
 
           for(int i = 0; i < MAX_ENTITIES; i++) {
             Entity *ep = &gp->entities[i];
@@ -773,7 +844,16 @@ void game_update_and_draw(Game *gp) {
             }
 
             if(ep->kind == ENTITY_KIND_INVADER) {
-              all_enemies_are_dead = false;
+              advance_to_next_wave = false;
+              live_enemies++;
+            }
+
+            if(ep->kind == ENTITY_KIND_HEALTH_PACK) {
+              advance_to_next_wave = false;
+            }
+
+            if(ep->kind == ENTITY_KIND_SHIELDS_PICKUP) {
+              advance_to_next_wave = false;
             }
 
           }
@@ -783,11 +863,39 @@ void game_update_and_draw(Game *gp) {
             gp->next_state = GAME_STATE_GAME_OVER;
           }
 
-          if(all_enemies_are_dead) {
+          if(advance_to_next_wave) {
             gp->wave_counter++;
             gp->next_state = GAME_STATE_WAVE_TRANSITION;
           }
 
+          if(gp->wave_counter >= 1) {
+            if(player_is_alive && live_enemies > 1) {
+
+              // TODO how should we control when the player gets some health?
+              if(gp->time_since_last_health_spawned >= 10) {
+                //if(GetRandomValue(0, 10) == 5) {
+                {
+                  Entity *health_pack = entity_spawn(gp);
+                  entity_init_health_pack(gp, health_pack);
+                }
+                gp->time_since_last_health_spawned = 0;
+              } else {
+                gp->time_since_last_health_spawned += gp->timestep;
+              }
+
+              if(gp->time_since_last_shields_spawned >= 20) {
+                //if(GetRandomValue(0, 10) == 5) {
+                {
+                  Entity *shields_pickup = entity_spawn(gp);
+                  entity_init_shields_pickup(gp, shields_pickup);
+                }
+                gp->time_since_last_shields_spawned = 0;
+              } else {
+                gp->time_since_last_shields_spawned += gp->timestep;
+              }
+
+            }
+          }
 
         } break;
       case GAME_STATE_GAME_OVER:
@@ -916,6 +1024,7 @@ void game_update_and_draw(Game *gp) {
 
                 if(ep->received_damage > 0) {
 
+                  SetSoundPan(gp->player_damage_sound, Normalize(ep->pos.x, WINDOW_WIDTH, 0));
                   PlaySound(gp->player_damage_sound);
 
                   if(ep->damage_blink_total_time > 0) {
@@ -965,6 +1074,47 @@ void game_update_and_draw(Game *gp) {
                   ep->particle_emitter.particle.vel =
                     Vector2Add(ep->particle_emitter.particle.vel, (Vector2){2*(float)GetRandomValue(-10, 10),});
                   particle_emit(gp, ep->particle_emitter);
+                }
+
+              } break;
+            case ENTITY_CONTROL_HEALTH_PACK:
+              {
+                if(ep->received_damage > 0) {
+                  if(gp->player->health < PLAYER_HEALTH) {
+                    gp->player->health++;
+                  }
+                  // TODO health sound
+
+                  SetSoundPan(gp->invader_die_sound, Normalize(ep->pos.x, WINDOW_WIDTH, 0));
+                  PlaySound(gp->invader_die_sound);
+                  entity_die(gp, ep);
+                  goto entity_update_end;
+                }
+
+                if(ep->pos.y > WINDOW_HEIGHT + ep->half_size.y) {
+                  entity_die(gp, ep);
+                  goto entity_update_end;
+                }
+
+              } break;
+            case ENTITY_CONTROL_SHIELDS_PICKUP:
+              {
+                if(ep->received_damage > 0) {
+                  if(!(gp->player->flags & ENTITY_FLAG_HAS_SHIELDS)) {
+                    gp->player->flags |= ENTITY_FLAG_HAS_SHIELDS;
+                    gp->player->shields_time = 0;
+                  }
+
+                  SetSoundPan(gp->invader_die_sound, Normalize(ep->pos.x, WINDOW_WIDTH, 0));
+                  PlaySound(gp->invader_die_sound);
+
+                  entity_die(gp, ep);
+                  goto entity_update_end;
+                }
+
+                if(ep->pos.y > WINDOW_HEIGHT + ep->half_size.y) {
+                  entity_die(gp, ep);
+                  goto entity_update_end;
                 }
 
               } break;
@@ -1049,6 +1199,7 @@ void game_update_and_draw(Game *gp) {
             case ENTITY_CONTROL_INVADER_IN_FORMATION:
               {
                 if(ep->health <= 0) {
+                  SetSoundPan(gp->invader_die_sound, Normalize(ep->pos.x, WINDOW_WIDTH, 0));
                   PlaySound(gp->invader_die_sound);
                   gp->score += 5;
 
@@ -1178,6 +1329,16 @@ void game_update_and_draw(Game *gp) {
             }
           }
 
+          if(ep->flags & ENTITY_FLAG_HAS_SHIELDS) {
+            if(ep->shields_time > SHIELDS_TIME) {
+              ep->shields_time = 0;
+              ep->flags &= ~ENTITY_FLAG_HAS_SHIELDS;
+            } else {
+              ep->shields_time += gp->timestep;
+              ep->received_damage = 0;
+            }
+          }
+
           if(ep->flags & ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE) {
             if(ep->received_damage > 0) {
               ep->health -= ep->received_damage;
@@ -1250,6 +1411,20 @@ entity_update_end:; // apparently just placing a label somewhere isn't legal
       gp->live_particles++;
 
       { /* particle_update */
+
+        {
+          Rectangle particle_rec =
+          {
+            p->pos.x, p->pos.y,
+            p->half_size.x * 2, p->half_size.y * 2,
+          };
+
+          if(!CheckCollisionRecs(particle_rec, WINDOW_RECT)) {
+            p->live = 0;
+            continue;
+          }
+        }
+
         if(p->flags & PARTICLE_FLAG_HAS_SPRITE) {
           sprite_update(gp, &p->sprite);
 
@@ -1296,6 +1471,15 @@ update_end:;
               if(ep->damage_blink_high) {
                 tint = ep->damage_blink_sprite_tint;
               }
+            }
+
+            if(ep->flags & ENTITY_FLAG_HAS_SHIELDS) {
+              float freq = SHIELDS_COLOR_ANIMATE_FREQ;
+              if(ep->shields_time >= SHIELDS_TIME * 0.77) {
+                freq *= 2.0;
+              }
+              float t = Normalize(sinf(ep->shields_time*freq), -1, 1);
+              tint = ColorLerp(MAGENTA, YELLOW, t);
             }
 
             draw_sprite_ex(gp, ep->sprite, ep->pos, ep->sprite_scale, 0, tint);
