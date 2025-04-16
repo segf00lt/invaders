@@ -131,7 +131,7 @@ void entity_init_player(Game *gp, Entity *ep) {
         .sprite = SPRITE_ORANGE_FIRE_PARTICLE_MAIN,
         .sprite_tint = WHITE,
         .sprite_scale = ORANGE_FIRE_PARTICLE_SPRITE_SCALE,
-        .vel = Vector2Scale(PLAYER_MISSILE_VELOCITY, 0.2),
+        .vel = Vector2Scale(PLAYER_MISSILE_VELOCITY, 0.1),
         .half_size = { 8, 8 },
       },
     },
@@ -1075,10 +1075,13 @@ void game_update_and_draw(Game *gp) {
                 }
 
                 if(ep->flags & ENTITY_FLAG_HAS_PARTICLE_EMITTER) {
-                  ep->particle_emitter.particle.pos = ep->pos;
-                  ep->particle_emitter.particle.vel =
-                    Vector2Add(ep->particle_emitter.particle.vel, (Vector2){2*(float)GetRandomValue(-10, 10),});
-                  particle_emit(gp, ep->particle_emitter);
+                  Particle_emitter emitter = ep->particle_emitter;
+                  emitter.particle.sprite.fps += GetRandomValue(-3, 0);
+                  emitter.particle.pos = ep->pos;
+                  emitter.particle.vel =
+                    Vector2Add(emitter.particle.vel, (Vector2){2*(float)GetRandomValue(-2, 2),(float)GetRandomValue(-10, 0)});
+
+                  particle_emit(gp, emitter);
                 }
 
               } break;
@@ -1406,7 +1409,7 @@ entity_update_end:; // apparently just placing a label somewhere isn't legal
     gp->live_particles = 0;
 
     // TODO interesting particles
-    for(int i = 0; i < MAX_PARTICLES; i++) { /* update particles */
+    for(int i = 0; i < MAX_PARTICLES; i++) {
 
       Particle *p = &gp->particles[i];
 
@@ -1416,6 +1419,10 @@ entity_update_end:; // apparently just placing a label somewhere isn't legal
       gp->live_particles++;
 
       { /* particle_update */
+
+        {
+          p->pos = Vector2Add(p->pos, Vector2Scale(p->vel, gp->timestep));
+        }
 
         {
           Rectangle particle_rec =
@@ -1443,7 +1450,7 @@ entity_update_end:; // apparently just placing a label somewhere isn't legal
 
       } /* particle_update */
 
-    } /* update particles */
+    } /* for(int i = 0; i < MAX_PARTICLES; i++) */
 
 update_end:;
   } /* update */

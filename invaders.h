@@ -115,12 +115,12 @@
 
 #define HEALTH_PACK_SIZE ((Vector2){ 50, 50 })
 #define HEALTH_PACK_INITIAL_Y ((float)-80.0f)
-#define HEALTH_PACK_VELOCITY ((Vector2){ 0, 200 })
+#define HEALTH_PACK_VELOCITY ((Vector2){ 0, 300 })
 #define HEALTH_PACK_SPRITE_SCALE ((float)5.0f)
 
 #define SHIELDS_PICKUP_SIZE ((Vector2){ 60, 60 })
 #define SHIELDS_PICKUP_INITIAL_Y ((float)-80.0f)
-#define SHIELDS_PICKUP_VELOCITY ((Vector2){ 0, 480 })
+#define SHIELDS_PICKUP_VELOCITY ((Vector2){ 0, 500 })
 #define SHIELDS_PICKUP_SPRITE_SCALE ((float)2.0f)
 
 #define SHIELDS_TIME ((float)7.0f)
@@ -141,7 +141,7 @@
 #define RESUME_HINT_BLINK_PERIOD ((float)0.66)
 
 #define ORANGE_FIRE_PARTICLE_SPRITE_SCALE ((float)2.0f)
-#define PURPLE_FIRE_PARTICLE_SPRITE_SCALE ((float)3.0f)
+#define PURPLE_FIRE_PARTICLE_SPRITE_SCALE ((float)2.0f)
 
 
 /* macros */
@@ -408,7 +408,6 @@ struct Entity {
   Missile_launcher missile_launcher;
 
   Entity_kind_mask collision_mask;
-
   int              damage_amount;
 
   Sound missile_sound;
