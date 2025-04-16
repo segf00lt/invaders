@@ -4,7 +4,7 @@
 
 
 #define CC "clang"
-#define BASE_FLAGS "-g", "-O0", "-Wall", "-Wpedantic", "-Werror", "-Wno-switch", "-Wno-comment", "-Wno-format-pedantic", "-Wno-extra-semi", "-D_UNITY_BUILD_", "-I'./third_party'"
+#define BASE_FLAGS "-g", "-O0", "-Wall", "-Wpedantic", "-Werror", "-Wno-switch", "-Wno-comment", "-Wno-format-pedantic", "-Wno-extra-semi", "-D_UNITY_BUILD_", "-I./third_party"
 #define TARGET "invaders.c"
 #define EXE "invaders"
 #define LDFLAGS "-lraylib", "-lm"
@@ -15,14 +15,14 @@
 #define RAYLIB_HEADER_PATTERN "/opt/homebrew/include/raylib.h", "/opt/homebrew/include/raymath.h", "/opt/homebrew/include/rlgl.h"
 #define GAME_MODULE "invaders.dylib"
 #define SHARED "-dynamiclib"
-#define EXTRA_FLAGS "-L'/opt/homebrew/lib/'", "-I'/opt/homebrew/include/'," "-Wno-format"
+#define EXTRA_FLAGS "-L/opt/homebrew/lib/", "-I/opt/homebrew/include/", "-Wno-format"
 
 #else
 
 #define RAYLIB_HEADER_PATTERN "/usr/local/include/raylib.h", "/usr/local/include/raymath.h", "/usr/local/include/rlgl.h"
 #define GAME_MODULE "invaders.so"
 #define SHARED "-shared"
-#define EXTRA_FLAGS "-L'/usr/local/lib/'", "-I'/usr/local/include/'"
+#define EXTRA_FLAGS "-L/usr/local/lib/", "-I/usr/local/include/"
 
 #endif
 
