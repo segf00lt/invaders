@@ -1208,13 +1208,13 @@ void nob_log(Nob_Log_Level level, const char *fmt, ...)
 
   switch (level) {
     case NOB_INFO:
-      fprintf(stderr, "[INFO] ");
+      fprintf(stderr, "INFO: ");
       break;
     case NOB_WARNING:
-      fprintf(stderr, "[WARNING] ");
+      fprintf(stderr, "WARNING: ");
       break;
     case NOB_ERROR:
-      fprintf(stderr, "[ERROR] ");
+      fprintf(stderr, "ERROR: ");
       break;
     case NOB_NO_LOGS: return;
     default:
