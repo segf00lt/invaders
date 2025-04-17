@@ -1,5 +1,6 @@
 *.vim
 *.so
+*.so*
 *.a
 *.o
 a.out
