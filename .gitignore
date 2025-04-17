@@ -15,3 +15,7 @@ aseprite/atlas.json
 *.log
 nob
 nob.old
+invaders.js
+invaders.html
+invaders.wasm
+invaders.data

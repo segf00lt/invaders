@@ -107,39 +107,39 @@ void entity_init_player(Game *gp, Entity *ep) {
   ep->pos = PLAYER_INITIAL_OFFSCREEN_POS;
 
   ep->missile_launcher =
-  (Missile_launcher){
-    .missile_entity_flags =
-      ENTITY_FLAG_HAS_SPRITE |
-      ENTITY_FLAG_HAS_PARTICLE_EMITTER |
-      0,
+    (Missile_launcher){
+      .missile_entity_flags =
+        ENTITY_FLAG_HAS_SPRITE |
+        ENTITY_FLAG_HAS_PARTICLE_EMITTER |
+        0,
 
-    .cooldown_period = PLAYER_MISSILE_LAUNCHER_COOLDOWN,
-    .spawn_offset = PLAYER_MISSILE_SPAWN_OFFSET,
-    .initial_vel = PLAYER_MISSILE_VELOCITY,
-    .missile_size = PLAYER_MISSILE_SIZE,
-    .missile_color = PLAYER_MISSILE_COLOR,
-    .collision_mask = PLAYER_MISSILE_COLLISION_MASK,
-    .damage_amount = PLAYER_MISSILE_DAMAGE,
-    .missile_sound = &gp->player_missile_sound,
+      .cooldown_period = PLAYER_MISSILE_LAUNCHER_COOLDOWN,
+      .spawn_offset = PLAYER_MISSILE_SPAWN_OFFSET,
+      .initial_vel = PLAYER_MISSILE_VELOCITY,
+      .missile_size = PLAYER_MISSILE_SIZE,
+      .missile_color = PLAYER_MISSILE_COLOR,
+      .collision_mask = PLAYER_MISSILE_COLLISION_MASK,
+      .damage_amount = PLAYER_MISSILE_DAMAGE,
+      .missile_sound = &gp->player_missile_sound,
 
-    .particle_emitter = {
-      .particle = {
-        .flags =
-          PARTICLE_FLAG_HAS_SPRITE |
-          PARTICLE_FLAG_DIE_WHEN_ANIM_FINISH |
-          0,
-        .sprite = SPRITE_ORANGE_FIRE_PARTICLE_MAIN,
-        .sprite_tint = WHITE,
-        .sprite_scale = ORANGE_FIRE_PARTICLE_SPRITE_SCALE,
-        .vel = Vector2Scale(PLAYER_MISSILE_VELOCITY, 0.1),
-        .half_size = { 8, 8 },
+      .particle_emitter = {
+        .particle = {
+          .flags =
+            PARTICLE_FLAG_HAS_SPRITE |
+            PARTICLE_FLAG_DIE_WHEN_ANIM_FINISH |
+            0,
+          .sprite = SPRITE_ORANGE_FIRE_PARTICLE_MAIN,
+          .sprite_tint = WHITE,
+          .sprite_scale = ORANGE_FIRE_PARTICLE_SPRITE_SCALE,
+          .vel = Vector2Scale(PLAYER_MISSILE_VELOCITY, 0.1),
+          .half_size = { 8, 8 },
+        },
       },
-    },
 
-    .sprite = SPRITE_SHIP_MISSILE,
-    .sprite_tint = WHITE,
-    .sprite_scale = PLAYER_MISSILE_SPRITE_SCALE,
-  };
+      .sprite = SPRITE_SHIP_MISSILE,
+      .sprite_tint = WHITE,
+      .sprite_scale = PLAYER_MISSILE_SPRITE_SCALE,
+    };
 
   ep->health = PLAYER_HEALTH;
 
@@ -276,7 +276,7 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Ve
       },
     };
 
-    ep->health = INVADER_HEALTH;
+  ep->health = INVADER_HEALTH;
 
   ep->pos = initial_pos;
 
@@ -878,7 +878,6 @@ void game_update_and_draw(Game *gp) {
 
               // TODO how should we control when the player gets some health?
               if(gp->time_since_last_health_spawned >= 10) {
-                //if(GetRandomValue(0, 10) == 5) {
                 {
                   Entity *health_pack = entity_spawn(gp);
                   entity_init_health_pack(gp, health_pack);
@@ -889,7 +888,6 @@ void game_update_and_draw(Game *gp) {
               }
 
               if(gp->time_since_last_shields_spawned >= 20) {
-                //if(GetRandomValue(0, 10) == 5) {
                 {
                   Entity *shields_pickup = entity_spawn(gp);
                   entity_init_shields_pickup(gp, shields_pickup);
@@ -939,12 +937,13 @@ void game_update_and_draw(Game *gp) {
         //    } else {
         //    }
         //  } break;
-    } /* switch(gp->state) */
+    }
 
-    if(gp->background_y_offset >= WINDOW_HEIGHT) {
-      gp->background_y_offset = 0;
+    // TODO fix background scroll stuttering
+    if(gp->background_y_offset >= 0.0f) {
+      gp->background_y_offset = ((gp->background_texture.height * -1) >> 1) * BACKGROUND_SCALE ;
     } else {
-      gp->background_y_offset -= gp->timestep * gp->background_scroll_speed;
+      gp->background_y_offset += gp->timestep * gp->background_scroll_speed;
     }
 
     gp->live_entities = 0;
@@ -1450,7 +1449,7 @@ entity_update_end:; // apparently just placing a label somewhere isn't legal
 
       } /* particle_update */
 
-    } /* for(int i = 0; i < MAX_PARTICLES; i++) */
+    }
 
 update_end:;
   } /* update */
@@ -1460,10 +1459,11 @@ update_end:;
 
     ClearBackground(BLACK);
 
-    DrawTextureRec(
+    DrawTextureEx(
         gp->background_texture,
-        (Rectangle){ 0, gp->background_y_offset, WINDOW_WIDTH, WINDOW_HEIGHT },
-        (Vector2){0},
+        (Vector2){0, gp->background_y_offset},
+        0,
+        BACKGROUND_SCALE,
         (Color){255, 255, 255, 190});
 
     for(Entity_order order = ENTITY_ORDER_FIRST; order < ENTITY_ORDER_MAX; order++) {
@@ -1654,6 +1654,8 @@ update_end:;
         "most entities allocated: %li\n"
         "live particles count: %li\n"
         "particle_buf_pos: %i\n"
+        "background y offset: %f\n"
+        "background texture height: %i\n"
         "screen width: %i\n"
         "screen height: %i\n"
         "game state: %s";
@@ -1666,6 +1668,8 @@ update_end:;
           gp->entities_allocated,
           gp->live_particles,
           gp->particles_buf_pos,
+          gp->background_y_offset,
+          gp->background_texture.height,
           GetScreenWidth(),
           GetScreenHeight(),
           Game_state_strings[gp->state]);
@@ -1683,4 +1687,4 @@ update_end:;
 
   game_reset_frame_scratch(gp);
 
-}
+    }

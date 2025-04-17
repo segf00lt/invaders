@@ -14,17 +14,17 @@ typedef void (*Game_update_and_draw_proc)(Game *);
 
 void load_assets(Game *gp) {
   gp->font = GetFontDefault();
-  gp->background_texture = LoadTexture("sprites/nightsky.png");
+  gp->background_texture = LoadTexture("./sprites/nightsky.png");
 
-  gp->sprite_atlas = LoadTexture("aseprite/atlas.png");
+  gp->sprite_atlas = LoadTexture("./aseprite/atlas.png");
 
-  gp->player_missile_sound = LoadSound("sounds/missile_sound.wav");
-  gp->invader_missile_sound = LoadSound("sounds/invader_missile.wav");
-  gp->invader_die_sound = LoadSound("sounds/invader_damage.wav");
-  gp->player_damage_sound = LoadSound("sounds/player_damage.wav");
-  gp->player_die_sound = LoadSound("sounds/player_die.wav");
-  gp->wave_banner_sound = LoadSound("sounds/wave_banner.wav");
-  gp->hyperspace_jump_sound = LoadSound("sounds/hyperspace_jump.wav");
+  gp->player_missile_sound = LoadSound("./sounds/missile_sound.wav");
+  gp->invader_missile_sound = LoadSound("./sounds/invader_missile.wav");
+  gp->invader_die_sound = LoadSound("./sounds/invader_damage.wav");
+  gp->player_damage_sound = LoadSound("./sounds/player_damage.wav");
+  gp->player_die_sound = LoadSound("./sounds/player_die.wav");
+  gp->wave_banner_sound = LoadSound("./sounds/wave_banner.wav");
+  gp->hyperspace_jump_sound = LoadSound("./sounds/hyperspace_jump.wav");
 
   gp->render_texture = LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT);
 }
