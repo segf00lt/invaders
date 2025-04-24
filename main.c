@@ -14,7 +14,10 @@ typedef void (*Game_update_and_draw_proc)(Game *);
 
 void load_assets(Game *gp) {
   gp->font = GetFontDefault();
-  gp->background_texture = LoadTexture("./sprites/nightsky.png");
+
+  Image background_image = LoadImage("./sprites/nightsky.png");
+  ImageResizeNN(&background_image, background_image.width*BACKGROUND_SCALE, background_image.height*BACKGROUND_SCALE);
+  gp->background_texture = LoadTextureFromImage(background_image);
 
   gp->sprite_atlas = LoadTexture("./aseprite/atlas.png");
 

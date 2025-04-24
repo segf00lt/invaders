@@ -1352,46 +1352,50 @@ bool nob_copy_directory_recursively(const char *src_path, const char *dst_path)
   if (type < 0) return false;
 
   switch (type) {
-    case NOB_FILE_DIRECTORY: {
-                               if (!nob_mkdir_if_not_exists(dst_path)) nob_return_defer(false);
-                               if (!nob_read_entire_dir(src_path, &children)) nob_return_defer(false);
+    case NOB_FILE_DIRECTORY:
+      {
+        if (!nob_mkdir_if_not_exists(dst_path)) nob_return_defer(false);
+        if (!nob_read_entire_dir(src_path, &children)) nob_return_defer(false);
 
-                               for (size_t i = 0; i < children.count; ++i) {
-                                 if (strcmp(children.items[i], ".") == 0) continue;
-                                 if (strcmp(children.items[i], "..") == 0) continue;
+        for (size_t i = 0; i < children.count; ++i) {
+          if (strcmp(children.items[i], ".") == 0) continue;
+          if (strcmp(children.items[i], "..") == 0) continue;
 
-                                 src_sb.count = 0;
-                                 nob_sb_append_cstr(&src_sb, src_path);
-                                 nob_sb_append_cstr(&src_sb, "/");
-                                 nob_sb_append_cstr(&src_sb, children.items[i]);
-                                 nob_sb_append_null(&src_sb);
+          src_sb.count = 0;
+          nob_sb_append_cstr(&src_sb, src_path);
+          nob_sb_append_cstr(&src_sb, "/");
+          nob_sb_append_cstr(&src_sb, children.items[i]);
+          nob_sb_append_null(&src_sb);
 
-                                 dst_sb.count = 0;
-                                 nob_sb_append_cstr(&dst_sb, dst_path);
-                                 nob_sb_append_cstr(&dst_sb, "/");
-                                 nob_sb_append_cstr(&dst_sb, children.items[i]);
-                                 nob_sb_append_null(&dst_sb);
+          dst_sb.count = 0;
+          nob_sb_append_cstr(&dst_sb, dst_path);
+          nob_sb_append_cstr(&dst_sb, "/");
+          nob_sb_append_cstr(&dst_sb, children.items[i]);
+          nob_sb_append_null(&dst_sb);
 
-                                 if (!nob_copy_directory_recursively(src_sb.items, dst_sb.items)) {
-                                   nob_return_defer(false);
-                                 }
-                               }
-                             } break;
+          if (!nob_copy_directory_recursively(src_sb.items, dst_sb.items)) {
+            nob_return_defer(false);
+          }
+        }
+      } break;
 
-    case NOB_FILE_REGULAR: {
-                             if (!nob_copy_file(src_path, dst_path)) {
-                               nob_return_defer(false);
-                             }
-                           } break;
+    case NOB_FILE_REGULAR:
+      {
+        if (!nob_copy_file(src_path, dst_path)) {
+          nob_return_defer(false);
+        }
+      } break;
 
-    case NOB_FILE_SYMLINK: {
-                             nob_log(NOB_WARNING, "TODO: Copying symlinks is not supported yet");
-                           } break;
+    case NOB_FILE_SYMLINK:
+      {
+        nob_log(NOB_WARNING, "TODO: Copying symlinks is not supported yet");
+      } break;
 
-    case NOB_FILE_OTHER: {
-                           nob_log(NOB_ERROR, "Unsupported type of file %s", src_path);
-                           nob_return_defer(false);
-                         } break;
+    case NOB_FILE_OTHER:
+      {
+        nob_log(NOB_ERROR, "Unsupported type of file %s", src_path);
+        nob_return_defer(false);
+      } break;
 
     default: NOB_UNREACHABLE("nob_copy_directory_recursively");
   }

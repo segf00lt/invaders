@@ -48,6 +48,7 @@ void str8_list_append_string_(Arena *a, Str8_list *list, Str8 str);
 Str8_list push_str8_list_copy(Arena *a, Str8_list list);
 
 Str8 push_str8_copy(Arena *a, Str8 str);
+Str8 push_str8_copy_cstr(Arena *a, char *cstr);
 Str8 push_str8fv(Arena *a, char *fmt, va_list args);
 Str8 push_str8f(Arena *a, char *fmt, ...);
 
@@ -176,6 +177,11 @@ Str8 push_str8_copy(Arena *a, Str8 str) {
   memory_copy(s, str.s, str.len);
   s[str.len] = 0;
   return (Str8){ .s = s, .len = str.len };
+}
+
+INLINE Str8 push_str8_copy_cstr(Arena *a, char *cstr) {
+  Str8 str = { .s = (u8*)cstr, .len = memory_strlen(cstr) };
+  return push_str8_copy(a, str);
 }
 
 Str8 push_str8fv(Arena *a, char *fmt, va_list args){

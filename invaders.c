@@ -939,9 +939,8 @@ void game_update_and_draw(Game *gp) {
         //  } break;
     }
 
-    // TODO fix background scroll stuttering
-    if(gp->background_y_offset >= 0.0f) {
-      gp->background_y_offset = ((gp->background_texture.height * -1) >> 1) * BACKGROUND_SCALE ;
+    if(gp->background_y_offset >= gp->background_texture.height) {
+      gp->background_y_offset -= gp->background_texture.height;
     } else {
       gp->background_y_offset += gp->timestep * gp->background_scroll_speed;
     }
@@ -1459,12 +1458,15 @@ update_end:;
 
     ClearBackground(BLACK);
 
-    DrawTextureEx(
+    DrawTextureV(
         gp->background_texture,
         (Vector2){0, gp->background_y_offset},
-        0,
-        BACKGROUND_SCALE,
-        (Color){255, 255, 255, 190});
+        (Color){255, 255, 255, 150});
+
+    DrawTextureV(
+        gp->background_texture,
+        (Vector2){0, gp->background_y_offset - gp->background_texture.height},
+        (Color){255, 255, 255, 150});
 
     for(Entity_order order = ENTITY_ORDER_FIRST; order < ENTITY_ORDER_MAX; order++) {
       for(s64 i = 0; i < MAX_ENTITIES; i++) {
