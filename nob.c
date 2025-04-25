@@ -42,9 +42,13 @@ int build_static(void);
 int build_wasm(void);
 int run_tags(void);
 int build_raylib(void);
+int build_raylib_static(void);
+int build_raylib_shared(void);
+int build_raylib_web(void);
 
 Arena _arena;
 Arena *arena = &_arena;
+char *root_path;
 
 int build_raylib(void) {
   nob_log(NOB_INFO, "building raylib");
@@ -53,14 +57,15 @@ int build_raylib(void) {
 
   Arena_save save = arena_to_save(arena);
 
-  Str8 dir_path = push_str8_copy_cstr(arena, (char*)nob_get_current_dir_temp());
-
   ASSERT(nob_set_current_dir("./third_party/raylib"));
 
   nob_cmd_append(&cmd, "make", "clean");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  nob_cmd_append(&cmd, "make", "clean");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP", "RAYLIB_LIBTYPE=SHARED");
@@ -72,7 +77,65 @@ int build_raylib(void) {
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_WEB");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  ASSERT(nob_set_current_dir(dir_path.s));
+  ASSERT(nob_set_current_dir(root_path));
+
+  arena_from_save(arena, save);
+
+  return 1;
+}
+
+int build_raylib_static(void) {
+  nob_log(NOB_INFO, "building raylib static");
+
+  Nob_Cmd cmd = {0};
+
+  Arena_save save = arena_to_save(arena);
+
+  ASSERT(nob_set_current_dir("./third_party/raylib"));
+
+  nob_cmd_append(&cmd, "make", "clean");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  return 1;
+}
+
+int build_raylib_shared(void) {
+  nob_log(NOB_INFO, "building raylib shared");
+
+  Nob_Cmd cmd = {0};
+
+  Arena_save save = arena_to_save(arena);
+
+  ASSERT(nob_set_current_dir("./third_party/raylib"));
+
+  nob_cmd_append(&cmd, "make", "clean");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP", "RAYLIB_LIBTYPE=SHARED");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  return 1;
+}
+
+int build_raylib_web(void) {
+  nob_log(NOB_INFO, "building raylib web");
+
+  Nob_Cmd cmd = {0};
+
+  Arena_save save = arena_to_save(arena);
+
+  ASSERT(nob_set_current_dir("./third_party/raylib"));
+
+  nob_cmd_append(&cmd, "make", "clean");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_WEB");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  ASSERT(nob_set_current_dir(root_path));
 
   arena_from_save(arena, save);
 
@@ -136,7 +199,6 @@ int build_static(void) {
   return 1;
 }
 
-// TODO WASM build has no audio
 int build_wasm(void) {
   run_metaprogram();
   run_tags();
@@ -145,9 +207,11 @@ int build_wasm(void) {
 
   nob_log(NOB_INFO, "building for WASM");
 
-  // -sUSE_GLFW=3 -sTOTAL_MEMORY=67108864 -sFORCE_FILESYSTEM=1 --preload-file resources -sMINIFY_HTML=0
+  ASSERT(nob_mkdir_if_not_exists("build"));
+  ASSERT(nob_mkdir_if_not_exists("./build/wasm"));
+
   char *target = "wasm_main.c";
-  nob_cmd_append(&cmd, "emcc", WASM_FLAGS, "--preload-file", "./aseprite/", "--preload-file", "./sprites/", "--preload-file", "./sounds/", target, RAYLIB_STATIC_LINK_WASM_OPTIONS, RAYLIB_STATIC_LINK_WASM_OPTIONS, "-sEXPORTED_RUNTIME_METHODS=ccall", "-sUSE_GLFW=3", "-sFORCE_FILESYSTEM=1", "-sMINIFY_HTML=0", "--shell-file", "./third_party/raylib/minshell.html", "-o", "invaders.html");
+  nob_cmd_append(&cmd, "emcc", WASM_FLAGS, "--preload-file", "./aseprite/atlas.png", "--preload-file", "./sprites/nightsky.png", "--preload-file", "./sounds/", target, RAYLIB_STATIC_LINK_WASM_OPTIONS, RAYLIB_STATIC_LINK_WASM_OPTIONS, "-sEXPORTED_RUNTIME_METHODS=ccall", "-sUSE_GLFW=3", "-sFORCE_FILESYSTEM=1", "-sMODULARIZE=1", "-sWASM_WORKERS=1", "-sAUDIO_WORKLET=1", "-sUSE_PTHREADS=1", "-sWASM=1", "-sEXPORT_ES6=1", "-sGL_ENABLE_GET_PROC_ADDRESS", "-sINVOKE_RUN=0", "-sNO_EXIT_RUNTIME=1", "-sMINIFY_HTML=0", "-o", "./build/wasm/invaders.js");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   return 1;
@@ -172,9 +236,17 @@ int main(int argc, char **argv) {
 
   arena_init(arena);
 
+  {
+    const char *dir_tmp = nob_get_current_dir_temp();
+    int len = memory_strlen(dir_tmp);
+    root_path = arena_alloc(arena, len + 1);
+    memory_copy(root_path, dir_tmp, len);
+  }
+
+  //if(!build_raylib_web()) return 1;
   //if(!build_raylib()) return 1;
-  if(!build_hot_reload()) return 1;
   if(!build_wasm()) return 1;
+  //if(!build_hot_reload()) return 1;
   //if(!build_static()) return 1;
 
   return 0;

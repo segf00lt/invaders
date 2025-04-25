@@ -1,5 +1,7 @@
 #include <emscripten/emscripten.h>
 
+#define PLATFORM_WEB
+
 #include "invaders.h"
 
 
@@ -47,8 +49,8 @@ void wasm_main_loop(void *gp) {
 }
 
 int main(void) {
-  SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-  InitWindow(1000, 800, "invaders");
+  //SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+  InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "invaders");
   InitAudioDevice();
 
   SetTargetFPS(TARGET_FPS);
@@ -69,7 +71,9 @@ int main(void) {
 
   SetMasterVolume(GetMasterVolume() * 0.5);
 
-  ASSERT(IsAudioDeviceReady());
+  if(!IsAudioDeviceReady()) {
+    TraceLog(LOG_WARNING, "audio not initialized");
+  }
 
   emscripten_set_main_loop_arg(wasm_main_loop, (void*)gp, TARGET_FPS, 1);
 

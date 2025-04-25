@@ -20,3 +20,4 @@ invaders.js
 invaders.html
 invaders.wasm
 invaders.data
+build/

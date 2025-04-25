@@ -636,6 +636,7 @@ void game_update_and_draw(Game *gp) {
       }
     }
 
+#ifndef PLATFORM_WEB
     if(IsKeyPressed(KEY_F5)) {
       game_reset(gp);
     }
@@ -661,6 +662,7 @@ void game_update_and_draw(Game *gp) {
     //  gp->state = GAME_STATE_DEBUG_SANDBOX;
     //  gp->debug_flags &= ~GAME_DEBUG_FLAG_SANDBOX_LOADED;
     //}
+#endif
 
     int key = GetCharPressed();
     if(key != 0) {
