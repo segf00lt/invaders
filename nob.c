@@ -99,6 +99,8 @@ int build_raylib_static(void) {
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
+  ASSERT(nob_set_current_dir(root_path));
+
   return 1;
 }
 
@@ -116,6 +118,8 @@ int build_raylib_shared(void) {
 
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP", "RAYLIB_LIBTYPE=SHARED");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  ASSERT(nob_set_current_dir(root_path));
 
   return 1;
 }
@@ -244,9 +248,10 @@ int main(int argc, char **argv) {
   }
 
   //if(!build_raylib_web()) return 1;
-  //if(!build_raylib()) return 1;
-  if(!build_wasm()) return 1;
-  //if(!build_hot_reload()) return 1;
+  if(!build_raylib_static()) return 1;
+  if(!build_raylib_shared()) return 1;
+  //if(!build_wasm()) return 1;
+  if(!build_hot_reload()) return 1;
   //if(!build_static()) return 1;
 
   return 0;
