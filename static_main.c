@@ -55,7 +55,7 @@ int main(void) {
 
     gp->state = GAME_STATE_NONE;
     gp->background_scroll_speed = BACKGROUND_SCROLL_SPEED;
-    arena_init(&gp->frame_scratch);
+    gp->frame_scratch = arena_alloc();
 
     load_assets(gp);
   } /* init game */

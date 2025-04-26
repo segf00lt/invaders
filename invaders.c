@@ -12,15 +12,15 @@ b8 player_is_taking_damage = false;
 
 /* function bodies */
 
-INLINE void* game_frame_scratch_alloc(Game *gp, size_t bytes) {
-  return arena_alloc(&gp->frame_scratch, bytes);
+force_inline void* game_frame_scratch_alloc(Game *gp, size_t bytes) {
+  return arena_push(gp->frame_scratch, bytes, 1);
 }
 
-INLINE void game_reset_frame_scratch(Game *gp) {
-  arena_reset(&gp->frame_scratch);
+force_inline void game_reset_frame_scratch(Game *gp) {
+  arena_clear(gp->frame_scratch);
 }
 
-INLINE Entity *entity_spawn(Game *gp) {
+force_inline Entity *entity_spawn(Game *gp) {
   Entity *ep = NULL;
 
   if(!gp->entity_free_list) {
@@ -39,7 +39,7 @@ INLINE Entity *entity_spawn(Game *gp) {
   return ep;
 }
 
-INLINE void entity_die(Game *gp, Entity *ep) {
+force_inline void entity_die(Game *gp, Entity *ep) {
   ep->free_list_next = gp->entity_free_list;
   gp->entity_free_list = ep;
   ep->live = 0;
@@ -401,7 +401,7 @@ void entity_init_shields_pickup(Game *gp, Entity *ep) {
     Vector2Scale(SHIELDS_PICKUP_SIZE, 0.5);
 }
 
-INLINE void sprite_update(Game *gp, Sprite *sp) {
+force_inline void sprite_update(Game *gp, Sprite *sp) {
   if(!(sp->flags & SPRITE_FLAG_STILL)) {
 
     ASSERT(sp->fps > 0);
@@ -435,7 +435,7 @@ INLINE void sprite_update(Game *gp, Sprite *sp) {
 
 }
 
-INLINE Sprite_frame sprite_current_frame(Sprite sp) {
+force_inline Sprite_frame sprite_current_frame(Sprite sp) {
   s32 abs_cur_frame = sp.first_frame + sp.cur_frame;
 
   if(sp.flags & SPRITE_FLAG_REVERSE) {
@@ -447,7 +447,7 @@ INLINE Sprite_frame sprite_current_frame(Sprite sp) {
   return frame;
 }
 
-INLINE b32 sprite_at_keyframe(Sprite sp, s32 keyframe) {
+force_inline b32 sprite_at_keyframe(Sprite sp, s32 keyframe) {
   b32 result = 0;
 
   s32 abs_cur_frame = sp.first_frame + sp.cur_frame;
@@ -463,7 +463,7 @@ INLINE b32 sprite_at_keyframe(Sprite sp, s32 keyframe) {
   return result;
 }
 
-INLINE void draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint) {
+force_inline void draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint) {
   draw_sprite_ex(gp, sp, pos, 1.0f, 0.0f, tint);
 }
 
@@ -545,7 +545,7 @@ void game_reset(Game *gp) {
 
   gp->current_formation_id = 0;
 
-  arena_reset(&gp->frame_scratch);
+  arena_clear(gp->frame_scratch);
 
   gp->wave_transition_pre_delay_timer = 0;
   gp->wave_transition_post_delay_timer = 0;
@@ -1581,7 +1581,7 @@ update_end:;
       }
 
       if(gp->state > GAME_STATE_TITLE_SCREEN) {
-        Str8 score_num_str = push_str8f(&gp->frame_scratch, "%li", gp->score);
+        Str8 score_num_str = push_str8f(gp->frame_scratch, "%li", gp->score);
         int w = MeasureText("SCORE", SCORE_LABEL_FONT_SIZE);
         Vector2 pos = { 10, 10 };
         DrawTextEx(gp->font, "SCORE", pos, SCORE_LABEL_FONT_SIZE, SCORE_LABEL_FONT_SIZE/10.0f, RAYWHITE);

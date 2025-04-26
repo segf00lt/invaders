@@ -28,18 +28,20 @@ void print_json(JSON_value *val);
 Color color_from_hexcode(Str8 hexcode);
 
 
-INLINE void print_json(JSON_value *val) {
-  Arena tmp;
-  arena_init(&tmp);
-  print_json_(&tmp, val, 0);
-  arena_destroy(&tmp);
+Arena *scratch;
+
+
+force_inline void print_json(JSON_value *val) {
+  Arena_scope scope = scope_begin(scratch);
+  print_json_(scratch, val, 0);
+  scope_end(scope);
 }
 
 void print_json_(Arena *a, JSON_value *val, int indent) {
   char *indent_str = " ";
   int indent_factor = 4;
 
-  Arena_save save = arena_to_save(a);
+  Arena_scope scope = scope_begin(a);
   Str8 s = {0};
 
   do {
@@ -63,7 +65,7 @@ void print_json_(Arena *a, JSON_value *val, int indent) {
 
   printf("%s", s.s);
 
-  arena_from_save(a, save);
+  scope_end(scope);
 }
 
 Color color_from_hexcode(Str8 hexcode) {
@@ -85,11 +87,9 @@ Color color_from_hexcode(Str8 hexcode) {
 }
 
 int main(void) {
-  Arena temp_arena;
-  arena_init(&temp_arena);
+  Arena *temp_arena = arena_alloc();
 
-  Arena json_arena;
-  arena_init(&json_arena);
+  Arena *json_arena = arena_alloc();
 
   JSON_parser json_parser;
 
@@ -100,7 +100,7 @@ int main(void) {
   s64 src_len = 0;
   u8 *src = LoadFileData(ATLAS_METADATA_PATH, (int*)&src_len);
 
-  json_init_parser(&json_parser, &json_arena, src, src_len);
+  json_init_parser(&json_parser, json_arena, src, src_len);
   JSON_value *val = json_parse(&json_parser);
 
   if(!val) {
@@ -111,10 +111,9 @@ int main(void) {
 
   //print_json(json_parser.root);
 
-  Arena atlas_arena;
-  arena_init(&atlas_arena);
+  Arena *atlas_arena = arena_alloc();
 
-  Aseprite_atlas *atlas = arena_alloc(&atlas_arena, sizeof(Aseprite_atlas));
+  Aseprite_atlas *atlas = push_array(atlas_arena, Aseprite_atlas, 1);
   JSON_value *frames = val->value;
 
   ASSERT(str8_match(str8_lit("frames"), frames->name));
@@ -124,7 +123,7 @@ int main(void) {
   TraceLog(LOG_INFO, "atlas has %li frames", frames->array_length);
 
   atlas->frames_count = frames->array_length;
-  atlas->frames = arena_alloc(&atlas_arena, sizeof(Aseprite_atlas_frame) * atlas->frames_count);
+  atlas->frames = push_array(atlas_arena, Aseprite_atlas_frame, atlas->frames_count);
 
   int frame_i = 0;
   JSON_value *frame = frames->value;
@@ -143,9 +142,9 @@ int main(void) {
       if(str8_match_lit("filename", field->name)) {
         ASSERT(field->kind == JSON_VALUE_KIND_STRING);
 
-        Arena_save save = arena_to_save(&atlas_arena);
+        Arena_scope scope = scope_begin(atlas_arena);
 
-        Str8_list list = str8_split_by_char(&atlas_arena, field->str, '/');
+        Str8_list list = str8_split_by_char(atlas_arena, field->str, '/');
 
         ASSERT(list.count == 2);
 
@@ -163,9 +162,9 @@ int main(void) {
           atlas_frame.frame_index += frame_index_str.s[i] - '0';
         }
 
-        arena_from_save(&atlas_arena, save);
+        scope_end(scope);
 
-        atlas_frame.file_title = push_str8_copy(&atlas_arena, list.first->str);
+        atlas_frame.file_title = push_str8_copy(atlas_arena, list.first->str);
 
       } else if(str8_match_lit("frame", field->name)) {
         ASSERT(field->kind == JSON_VALUE_KIND_OBJECT);
@@ -208,23 +207,23 @@ int main(void) {
 
       if(str8_match_lit("app", field->name)) {
         ASSERT(field->kind == JSON_VALUE_KIND_STRING);
-        atlas_meta.app = push_str8_copy(&atlas_arena, field->str);
+        atlas_meta.app = push_str8_copy(atlas_arena, field->str);
 
       } else if(str8_match_lit("version", field->name)) {
         ASSERT(field->kind == JSON_VALUE_KIND_STRING);
-        atlas_meta.version = push_str8_copy(&atlas_arena, field->str);
+        atlas_meta.version = push_str8_copy(atlas_arena, field->str);
 
       } else if(str8_match_lit("image", field->name)) {
         ASSERT(field->kind == JSON_VALUE_KIND_STRING);
-        atlas_meta.image = push_str8_copy(&atlas_arena, field->str);
+        atlas_meta.image = push_str8_copy(atlas_arena, field->str);
 
       } else if(str8_match_lit("format", field->name)) {
         ASSERT(field->kind == JSON_VALUE_KIND_STRING);
-        atlas_meta.format = push_str8_copy(&atlas_arena, field->str);
+        atlas_meta.format = push_str8_copy(atlas_arena, field->str);
 
       } else if(str8_match_lit("scale", field->name)) {
         ASSERT(field->kind == JSON_VALUE_KIND_STRING);
-        atlas_meta.scale = push_str8_copy(&atlas_arena, field->str);
+        atlas_meta.scale = push_str8_copy(atlas_arena, field->str);
 
       } else if(str8_match_lit("size", field->name)) {
         ASSERT(field->kind == JSON_VALUE_KIND_OBJECT);
@@ -234,7 +233,7 @@ int main(void) {
         ASSERT(field->kind == JSON_VALUE_KIND_ARRAY);
         atlas_meta.frame_tags_count = field->array_length;
         atlas_meta.frame_tags =
-          arena_alloc(&atlas_arena, sizeof(Aseprite_frame_tag) * atlas_meta.frame_tags_count);
+          push_array(atlas_arena, Aseprite_frame_tag, atlas_meta.frame_tags_count);
 
         int tag_i = 0;
         JSON_value *tag = field->value;
@@ -250,9 +249,9 @@ int main(void) {
             if(str8_match_lit("name", tag_field->name)) {
               ASSERT(tag_field->kind == JSON_VALUE_KIND_STRING);
 
-              Arena_save save = arena_to_save(&atlas_arena);
+              Arena_scope scope = scope_begin(atlas_arena);
 
-              Str8_list list = str8_split_by_char(&atlas_arena, tag_field->str, '/');
+              Str8_list list = str8_split_by_char(atlas_arena, tag_field->str, '/');
 
               ASSERT(list.count == 2);
 
@@ -266,10 +265,10 @@ int main(void) {
                 return 1;
               }
 
-              arena_from_save(&atlas_arena, save);
+              scope_end(scope);
 
-              atlas_tag.file_title = push_str8_copy(&atlas_arena, list.first->str);
-              atlas_tag.tag_name = push_str8_copy(&atlas_arena, list.last->str);
+              atlas_tag.file_title = push_str8_copy(atlas_arena, list.first->str);
+              atlas_tag.tag_name = push_str8_copy(atlas_arena, list.last->str);
 
             } else if(str8_match_lit("data", tag_field->name)) {
               ASSERT(tag_field->kind == JSON_VALUE_KIND_STRING);
@@ -330,11 +329,10 @@ int main(void) {
 
   } /* populate atlas meta */
 
-  arena_destroy(&json_arena);
+  //arena_free(json_arena);
 
 
-  Arena sprite_arena;
-  arena_init(&sprite_arena);
+  Arena *sprite_arena = arena_alloc();
 
   { /* generate sprites from aseprite atlas */
 
@@ -381,7 +379,7 @@ int main(void) {
 
     Sprite_frame_slice sprite_frames =
     {
-      .d = arena_alloc(&sprite_arena, sizeof(Sprite_frame) * atlas->frames_count),
+      .d = push_array(sprite_arena, Sprite_frame, atlas->frames_count),
       .count = atlas->frames_count,
     };
 
@@ -398,23 +396,22 @@ int main(void) {
 
     }
 
-    Arena code_arena;
-    arena_init(&code_arena);
+    Arena *code_arena = arena_alloc();
 
     Str8 generated_code = 
-      push_str8f(&code_arena,
+      push_str8f(code_arena,
           "\n/////////////////////////\n"
           "// BEGIN GENERATED\n\n");
 
     generated_code =
-      push_str8f(&code_arena, "%S\n/* sprite frames array */\n\nconst Sprite_frame __sprite_frames[%li] =\n{\n", generated_code, sprite_frames.count);
+      push_str8f(code_arena, "%S\n/* sprite frames array */\n\nconst Sprite_frame __sprite_frames[%li] =\n{\n", generated_code, sprite_frames.count);
     for(int i = 0; i < sprite_frames.count; i++) {
       Sprite_frame f = sprite_frames.d[i];
       generated_code =
-        push_str8f(&code_arena, "%S  [%i] = { .x = %u, .y = %u, .w = %u, .h = %u, },\n", generated_code, i, f.x, f.y, f.w, f.h);
+        push_str8f(code_arena, "%S  [%i] = { .x = %u, .y = %u, .w = %u, .h = %u, },\n", generated_code, i, f.x, f.y, f.w, f.h);
     }
     generated_code =
-      push_str8f(&code_arena, "%S};\n\n", generated_code);
+      push_str8f(code_arena, "%S};\n\n", generated_code);
 
 
     Str8_list all_sprite_files = {0};
@@ -423,7 +420,7 @@ int main(void) {
       for(int i = 0; i < frames.count; i++) {
         Aseprite_atlas_frame frame = frames.d[i];
         Str8 file_title = frame.file_title;
-        str8_list_append_string(&sprite_arena, all_sprite_files, file_title);
+        str8_list_append_string(sprite_arena, all_sprite_files, file_title);
 
         while(i+1 < frames.count) {
           Aseprite_atlas_frame frame = frames.d[i+1];
@@ -455,7 +452,7 @@ int main(void) {
         }
 
         Str8 file_title = tag.file_title;
-        str8_list_append_string(&sprite_arena, sprite_files_with_frame_tags, file_title);
+        str8_list_append_string(sprite_arena, sprite_files_with_frame_tags, file_title);
 
         while(i+1 < frame_tags_count) {
           Aseprite_frame_tag tag = frame_tags[i+1];
@@ -532,7 +529,7 @@ int main(void) {
           for(int i = 0; i < ARRLEN(visited_frames); i++) {
             if(!visited_frames[i]) {
               there_are_untagged_frames = 1;
-              untagged_frames_list_str = push_str8f(&temp_arena, "%S  %i", untagged_frames_list_str, i);
+              untagged_frames_list_str = push_str8f(temp_arena, "%S  %i", untagged_frames_list_str, i);
             }
           }
 
@@ -565,13 +562,13 @@ int main(void) {
     { /* generate keyframes */
 
       generated_code =
-        push_str8f(&code_arena,
+        push_str8f(code_arena,
             "%S\n/* keyframes */\n\n", generated_code);
 
       Aseprite_frame_tag *frame_tags = atlas->meta.frame_tags;
       s64 frame_tags_count = atlas->meta.frame_tags_count;
 
-      Arena_save save = arena_to_save(&code_arena);
+      Arena_scope scope = scope_begin(code_arena);
       Str8 keyframes_code = {0};
 
       for(int i = 0; i < frame_tags_count; i++) {
@@ -594,25 +591,25 @@ int main(void) {
         abs_frame_index += tag.from;
 
         keyframes_code =
-          push_str8f(&code_arena,
+          push_str8f(code_arena,
               "%Sconst s32 SPRITE_KEYFRAME_%S_%S = %li;\n",
-              keyframes_code, str8_to_upper(&code_arena, tag.file_title), str8_to_upper(&code_arena, tag.tag_name), abs_frame_index);
+              keyframes_code, str8_to_upper(code_arena, tag.file_title), str8_to_upper(code_arena, tag.tag_name), abs_frame_index);
 
       }
 
-      arena_from_save(&code_arena, save);
-      keyframes_code = push_str8_copy(&code_arena, keyframes_code);
-      generated_code = push_str8f(&code_arena, "%S%S", generated_code, keyframes_code);
+      scope_end(scope);
+      keyframes_code = push_str8_copy(code_arena, keyframes_code);
+      generated_code = push_str8f(code_arena, "%S%S", generated_code, keyframes_code);
 
     } /* generate keyframes */
 
     { /* generate sprites */
 
       generated_code =
-        push_str8f(&code_arena,
+        push_str8f(code_arena,
             "%S\n\n/* sprites */\n\n", generated_code);
 
-      Arena_save save = arena_to_save(&code_arena);
+      Arena_scope scope = scope_begin(code_arena);
       Str8 sprites_code = {0};
 
       for(int i = 0; i < atlas->meta.frame_tags_count; i++) {
@@ -635,9 +632,9 @@ int main(void) {
 
         if(tag.to == tag.from) {
           sprites_code =
-            push_str8f(&code_arena,
+            push_str8f(code_arena,
                 "%Sconst Sprite SPRITE_%S_%S = { .flags = SPRITE_FLAG_STILL, .first_frame = %li, .last_frame = %li, .total_frames = 1 };\n",
-                sprites_code, str8_to_upper(&code_arena, tag.file_title), str8_to_upper(&code_arena, tag.tag_name), tag_first_frame, tag_last_frame);
+                sprites_code, str8_to_upper(code_arena, tag.file_title), str8_to_upper(code_arena, tag.tag_name), tag_first_frame, tag_last_frame);
         } else {
           s64 fps = 1000/atlas->frames[range.first_frame].duration;
 
@@ -663,13 +660,13 @@ int main(void) {
           }
 
           if(tag.n_repeats == 0) {
-            flags_str = push_str8f(&code_arena, "%S | SPRITE_FLAG_INFINITE_REPEAT", flags_str);
+            flags_str = push_str8f(code_arena, "%S | SPRITE_FLAG_INFINITE_REPEAT", flags_str);
           }
 
           sprites_code =
-            push_str8f(&code_arena,
+            push_str8f(code_arena,
                 "%Sconst Sprite SPRITE_%S_%S = { .flags = %S, .first_frame = %li, .last_frame = %li, .fps = %li, .total_frames = %li };\n",
-                sprites_code, str8_to_upper(&code_arena, tag.file_title), str8_to_upper(&code_arena, tag.tag_name), flags_str, tag_first_frame, tag_last_frame, fps, tag_last_frame - tag_first_frame + 1);
+                sprites_code, str8_to_upper(code_arena, tag.file_title), str8_to_upper(code_arena, tag.tag_name), flags_str, tag_first_frame, tag_last_frame, fps, tag_last_frame - tag_first_frame + 1);
         }
 
       }
@@ -690,9 +687,9 @@ int main(void) {
 
         if(range.first_frame == range.last_frame) {
           sprites_code =
-            push_str8f(&code_arena,
+            push_str8f(code_arena,
                 "%Sconst Sprite SPRITE_%S = { .flags = SPRITE_FLAG_STILL, .first_frame = %li, .last_frame = %li, .total_frames = 1 };\n",
-                sprites_code, str8_to_upper(&code_arena, range.file_title), range.first_frame, range.last_frame);
+                sprites_code, str8_to_upper(code_arena, range.file_title), range.first_frame, range.last_frame);
         } else {
 
           for(s64 fi = range.first_frame; fi < range.last_frame; fi++) {
@@ -706,36 +703,36 @@ int main(void) {
           s64 fps = 1000/atlas->frames[range.first_frame].duration;
 
           sprites_code =
-            push_str8f(&code_arena,
+            push_str8f(code_arena,
                 "%Sconst Sprite SPRITE_%S = { .flags = SPRITE_FLAG_INFINITE_REPEAT, .first_frame = %li, .last_frame = %li, .fps = %li, .total_frames = %li };\n",
-                sprites_code, str8_to_upper(&code_arena, range.file_title), range.first_frame, range.last_frame, fps, range.last_frame - range.first_frame + 1);
+                sprites_code, str8_to_upper(code_arena, range.file_title), range.first_frame, range.last_frame, fps, range.last_frame - range.first_frame + 1);
         }
 
       }
 
-      arena_from_save(&code_arena, save);
-      sprites_code = push_str8_copy(&code_arena, sprites_code);
-      generated_code = push_str8f(&code_arena, "%S%S", generated_code, sprites_code);
+      scope_end(scope);
+      sprites_code = push_str8_copy(code_arena, sprites_code);
+      generated_code = push_str8f(code_arena, "%S%S", generated_code, sprites_code);
 
     } /* generate sprites */
 
     generated_code =
-      push_str8f(&code_arena,
+      push_str8f(code_arena,
           "%S\n\n/////////////////////////\n"
           "// END GENERATED\n\n", generated_code);
 
     SaveFileData("invaders_sprite_data.c", generated_code.s, generated_code.len);
 
-    arena_destroy(&code_arena);
+    //arena_free(code_arena);
 
   } /* generate sprites from aseprite atlas */
 
 
-  arena_destroy(&atlas_arena);
+  //arena_free(atlas_arena);
 
-  arena_destroy(&sprite_arena);
+  //arena_free(sprite_arena);
 
-  arena_destroy(&temp_arena);
+  //arena_free(temp_arena);
 
   UnloadFileData(src);
 

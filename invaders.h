@@ -4,6 +4,7 @@
 #include <raylib.h>
 #include <raymath.h>
 #include <rlgl.h>
+
 #include "basic.h"
 #include "arena.h"
 #include "str.h"
@@ -467,7 +468,7 @@ struct Game {
 
   u64 frame_index;
 
-  Arena frame_scratch;
+  Arena *frame_scratch;
 
   char wave_banner_buf[256];
 

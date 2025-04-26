@@ -81,11 +81,13 @@ JSON_value* json_parse_null(JSON_parser *p);
 Str8        json_parse_raw_string(JSON_parser *p);
 
 
-#ifdef _UNITY_BUILD_
-#define JLIB_JSON_IMPLEMENTATION
 #endif
 
-#ifdef JLIB_JSON_IMPLEMENTATION
+#if defined(JLIB_JSON_IMPL) != defined(_UNITY_BUILD_)
+
+#ifdef _UNITY_BUILD_
+#define JLIB_JSON_IMPL
+#endif
 
 void json_init_parser(JSON_parser *p, Arena *arena, u8 *src, s64 src_len) {
   p->arena = arena;
@@ -97,9 +99,9 @@ void json_init_parser(JSON_parser *p, Arena *arena, u8 *src, s64 src_len) {
   p->root = 0;
 }
 
-INLINE JSON_value* json_alloc_value(JSON_parser *p) {
+force_inline JSON_value* json_alloc_value(JSON_parser *p) {
   ASSERT(p->arena);
-  return arena_alloc(p->arena, sizeof(JSON_value));
+  return push_array_no_zero(p->arena, JSON_value, 1);
 }
 
 //Str8 json_dump_to_str8(Arena *arena, JSON_value *root) {
@@ -113,7 +115,7 @@ JSON_value* json_parse(JSON_parser *p) {
   return p->root;
 }
 
-INLINE void json_parse_skip_whitespace(JSON_parser *p) {
+force_inline void json_parse_skip_whitespace(JSON_parser *p) {
   while(p->pos < p->end) {
     switch(*p->pos) {
       default:
@@ -326,7 +328,7 @@ Str8 json_parse_raw_string(JSON_parser *p) {
   }
 
   s64 len = (s64)(end - begin);
-  Str8 result = { .s = (u8*)arena_alloc(p->arena, (u64)len), .len = len };
+  Str8 result = { .s = (u8*)push_array_no_zero(p->arena, u8, len), .len = len };
   u8 *src = begin;
   s64 r = 0;
   s64 w = 0;
@@ -455,7 +457,5 @@ JSON_value* json_parse_null(JSON_parser *p) {
 
   return result;
 }
-
-#endif
 
 #endif

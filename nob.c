@@ -9,8 +9,8 @@
 
 
 #define CC "clang"
-#define DEV_FLAGS "-g", "-O0", "-Wall", "-Wpedantic", "-Werror", "-Wno-switch", "-Wno-comment", "-Wno-format-pedantic", "-Wno-extra-semi", "-D_UNITY_BUILD_"
-#define WASM_FLAGS "-Os", "-Wall", "-Wpedantic", "-Werror", "-Wno-switch", "-Wno-comment", "-Wno-format-pedantic", "-Wno-extra-semi", "-D_UNITY_BUILD_"
+#define DEV_FLAGS "-g", "-O0", "-Wall", "-Wpedantic", "-Werror", "-Wno-switch", "-Wno-comment", "-Wno-format-pedantic", "-Wno-initializer-overrides", "-Wno-extra-semi", "-D_UNITY_BUILD_"
+#define WASM_FLAGS "-Os", "-Wall", "-Wpedantic", "-Werror", "-Wno-switch", "-Wno-comment", "-Wno-format-pedantic", "-Wno-initializer-overrides", "-Wno-extra-semi", "-D_UNITY_BUILD_"
 #define TARGET "invaders.c"
 #define EXE "invaders"
 #define LDFLAGS "-lraylib", "-lm"
@@ -46,16 +46,13 @@ int build_raylib_static(void);
 int build_raylib_shared(void);
 int build_raylib_web(void);
 
-Arena _arena;
-Arena *arena = &_arena;
+Arena *scratch;
 char *root_path;
 
 int build_raylib(void) {
   nob_log(NOB_INFO, "building raylib");
 
   Nob_Cmd cmd = {0};
-
-  Arena_save save = arena_to_save(arena);
 
   ASSERT(nob_set_current_dir("./third_party/raylib"));
 
@@ -79,8 +76,6 @@ int build_raylib(void) {
 
   ASSERT(nob_set_current_dir(root_path));
 
-  arena_from_save(arena, save);
-
   return 1;
 }
 
@@ -88,8 +83,6 @@ int build_raylib_static(void) {
   nob_log(NOB_INFO, "building raylib static");
 
   Nob_Cmd cmd = {0};
-
-  Arena_save save = arena_to_save(arena);
 
   ASSERT(nob_set_current_dir("./third_party/raylib"));
 
@@ -109,8 +102,6 @@ int build_raylib_shared(void) {
 
   Nob_Cmd cmd = {0};
 
-  Arena_save save = arena_to_save(arena);
-
   ASSERT(nob_set_current_dir("./third_party/raylib"));
 
   nob_cmd_append(&cmd, "make", "clean");
@@ -129,8 +120,6 @@ int build_raylib_web(void) {
 
   Nob_Cmd cmd = {0};
 
-  Arena_save save = arena_to_save(arena);
-
   ASSERT(nob_set_current_dir("./third_party/raylib"));
 
   nob_cmd_append(&cmd, "make", "clean");
@@ -140,8 +129,6 @@ int build_raylib_web(void) {
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   ASSERT(nob_set_current_dir(root_path));
-
-  arena_from_save(arena, save);
 
   return 1;
 }
@@ -238,20 +225,21 @@ int main(int argc, char **argv) {
 
   NOB_GO_REBUILD_URSELF(argc, argv);
 
-  arena_init(arena);
+  scratch = arena_alloc();
 
   {
     const char *dir_tmp = nob_get_current_dir_temp();
     int len = memory_strlen(dir_tmp);
-    root_path = arena_alloc(arena, len + 1);
+    root_path = push_array(scratch, char, len + 1);
     memory_copy(root_path, dir_tmp, len);
   }
 
   //if(!build_raylib_web()) return 1;
-  if(!build_raylib_static()) return 1;
-  if(!build_raylib_shared()) return 1;
-  //if(!build_wasm()) return 1;
-  if(!build_hot_reload()) return 1;
+  //if(!build_raylib_static()) return 1;
+  //if(!build_raylib_shared()) return 1;
+  //if(!build_metaprogram()) return 1;
+  if(!build_wasm()) return 1;
+  //if(!build_hot_reload()) return 1;
   //if(!build_static()) return 1;
 
   return 0;

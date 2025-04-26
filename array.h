@@ -1,5 +1,5 @@
-#ifndef ARRAY_H
-#define ARRAY_H
+#ifndef JLIB_ARRAY_H
+#define JLIB_ARRAY_H
 
 
 #include "basic.h"
@@ -57,8 +57,8 @@ struct __Slice_header {
 #define arr_stride(array) ((s64)sizeof(*((array).d)))
 #define arr_ptr_stride(array) ((s64)sizeof(*((array)->d)))
 
-#define arr_init(array, arena) arr_init_(header_ptr_from_arr((array)), &arena, arr_stride(array), ARRAY_DEFAULT_CAP)
-#define arr_init_ex(array, arena, cap) arr_init_(header_ptr_from_arr((array)), &arena, arr_stride(array), cap)
+#define arr_init(array, arena) arr_init_(header_ptr_from_arr((array)), arena, arr_stride(array), ARRAY_DEFAULT_CAP)
+#define arr_init_ex(array, arena, cap) arr_init_(header_ptr_from_arr((array)), arena, arr_stride(array), cap)
 
 #define arr_push(array, elem) ((arr_push_no_zero_(header_ptr_from_arr((array)), arr_stride(array), 1)), (array).d[(array).count-1] = (elem))
 #define arr_push_n_ptr(array, n) ((arr_push_no_zero_(header_ptr_from_arr((array)), arr_stride(array), (n))), &((array).d[(array).count - (n)]))
@@ -84,18 +84,20 @@ void* arr_push_no_zero_(__Arr_header *arr, s64 stride, s64 push_count);
 //
 // Arrays are easier to reason about for certain applications than linked lists
 
-#ifdef _UNITY_BUILD_
-#define ARRAY_IMPL
 #endif
 
-#ifdef ARRAY_IMPL
+#if defined(JLIB_ARRAY_IMPL) != defined(_UNITY_BUILD_)
+
+#ifdef _UNITY_BUILD_
+#define JLIB_ARRAY_IMPL
+#endif
 
 
 void arr_init_(__Arr_header *arr, Arena *arena, s64 stride, s64 cap) {
   arr->count = 0;
   arr->cap = cap;
   arr->arena = arena;
-  arr->d = arena_alloc_no_zero(arena, cap * stride);
+  arr->d = arena_push(arena, cap * stride, 1);
 }
 
 void* arr_push_no_zero_(__Arr_header *arr, s64 stride, s64 push_count) {
@@ -108,7 +110,7 @@ void* arr_push_no_zero_(__Arr_header *arr, s64 stride, s64 push_count) {
       new_cap <<= 1;
     }
 
-    void *new_d = arena_alloc_no_zero(arr->arena, new_cap * stride);
+    void *new_d = arena_push(arr->arena, new_cap * stride, 1);
     memory_copy(new_d, arr->d, stride * (arr->count + push_count));
     arr->d = new_d;
     arr->cap = new_cap;
@@ -165,7 +167,5 @@ the end of the array. O(1) performance.
 
 */
 
-
-#endif
 
 #endif

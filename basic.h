@@ -15,12 +15,14 @@
 #define SIGN_EXTEND_s64(x, n) (s64)((n >= 64) ? (s64)x : (s64)((s64)x | (s64)(-((s64)x >> ((s64)n - 1lu)) << (s64)n)))
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
+#define CLAMP_BOT(a, b) MAX(a, b)
+#define CLAMP_TOP(a, b) MIN(a, b)
 #define ARRLEN(x) (sizeof(x)/sizeof(*x))
 #define STRLEN(x) ((sizeof(x)/sizeof(*x))-1)
 #define GLUE_(a,b) a##b
 #define GLUE(a,b) GLUE_(a,b)
 #define DUNNO fprintf(stderr, "======\nDUNNO WHAT HAPPENS ON LINE %i IN %s()\n======\n", __LINE__, __func__)
-#define INLINE __attribute__((always_inline)) inline
+#define ALIGN_UP(x, align) ((x + align - 1) & ~(align - 1))
 
 // TODO custom stb sprintf decorator
 //#if defined(stbsp_sprintf) && defined(stbsp_snprintf)
@@ -40,23 +42,324 @@
 
 /* various macro helpers from ryan fleury */
 
+
+////////////////////////////////
+//~ rjf: Clang OS/Arch Cracking
+
 #if defined(__clang__)
 
-#define COMPILER_CLANG 1
+# define COMPILER_CLANG 1
 
-#elif defined(__MSC_VER__)
+# if defined(_WIN32)
+#  define OS_WINDOWS 1
+# elif defined(__gnu_linux__) || defined(__linux__)
+#  define OS_LINUX 1
+# elif defined(__APPLE__) && defined(__MACH__)
+#  define OS_MAC 1
+# elif defined(__EMSCRIPTEN__)
+#  define OS_WEB 1
+# else
+#  error This compiler/OS combo is not supported.
+# endif
 
-#define COMPILER_MSVC 1
+# if defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64)
+#  define ARCH_X64 1
+# elif defined(i386) || defined(__i386) || defined(__i386__)
+#  define ARCH_X86 1
+# elif defined(__aarch64__)
+#  define ARCH_ARM64 1
+# elif defined(__arm__)
+#  define ARCH_ARM32 1
+# elif defined(__EMSCRIPTEN__)
+#  define ARCH_WEB64 1
+# else
+#  error Architecture not supported.
+# endif
+
+////////////////////////////////
+//~ rjf: MSVC OS/Arch Cracking
+
+#elif defined(_MSC_VER)
+
+# define COMPILER_MSVC 1
+
+# if _MSC_VER >= 1920
+#  define COMPILER_MSVC_YEAR 2019
+# elif _MSC_VER >= 1910
+#  define COMPILER_MSVC_YEAR 2017
+# elif _MSC_VER >= 1900
+#  define COMPILER_MSVC_YEAR 2015
+# elif _MSC_VER >= 1800
+#  define COMPILER_MSVC_YEAR 2013
+# elif _MSC_VER >= 1700
+#  define COMPILER_MSVC_YEAR 2012
+# elif _MSC_VER >= 1600
+#  define COMPILER_MSVC_YEAR 2010
+# elif _MSC_VER >= 1500
+#  define COMPILER_MSVC_YEAR 2008
+# elif _MSC_VER >= 1400
+#  define COMPILER_MSVC_YEAR 2005
+# else
+#  define COMPILER_MSVC_YEAR 0
+# endif
+
+# if defined(_WIN32)
+#  define OS_WINDOWS 1
+# else
+#  error This compiler/OS combo is not supported.
+# endif
+
+# if defined(_M_AMD64)
+#  define ARCH_X64 1
+# elif defined(_M_IX86)
+#  define ARCH_X86 1
+# elif defined(_M_ARM64)
+#  define ARCH_ARM64 1
+# elif defined(_M_ARM)
+#  define ARCH_ARM32 1
+# else
+#  error Architecture not supported.
+# endif
+
+////////////////////////////////
+//~ rjf: GCC OS/Arch Cracking
 
 #elif defined(__GNUC__) || defined(__GNUG__)
 
-#define COMPILER_GCC 1
+# define COMPILER_GCC 1
+
+# if defined(__gnu_linux__) || defined(__linux__)
+#  define OS_LINUX 1
+# else
+#  error This compiler/OS combo is not supported.
+# endif
+
+# if defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64)
+#  define ARCH_X64 1
+# elif defined(i386) || defined(__i386) || defined(__i386__)
+#  define ARCH_X86 1
+# elif defined(__aarch64__)
+#  define ARCH_ARM64 1
+# elif defined(__arm__)
+#  define ARCH_ARM32 1
+# else
+#  error Architecture not supported.
+# endif
 
 #else
-
-#error compiler not supported
-
+# error Compiler not supported.
 #endif
+
+////////////////////////////////
+//~ rjf: Arch Cracking
+
+#if defined(ARCH_X64) || defined(ARCH_WEB64)
+# define ARCH_64BIT 1
+#elif defined(ARCH_X86)
+# define ARCH_32BIT 1
+#endif
+
+#if ARCH_ARM32 || ARCH_ARM64 || ARCH_X64 || ARCH_X86 || ARCH_WEB64
+# define ARCH_LITTLE_ENDIAN 1
+#else
+# error Endianness of this architecture not understood by context cracker.
+#endif
+
+////////////////////////////////
+//~ rjf: Language Cracking
+
+#if defined(__cplusplus)
+# define LANG_CPP 1
+#else
+# define LANG_C 1
+#endif
+
+////////////////////////////////
+//~ rjf: Build Option Cracking
+
+#if !defined(BUILD_DEBUG)
+# define BUILD_DEBUG 1
+#endif
+
+#if !defined(BUILD_SUPPLEMENTARY_UNIT)
+# define BUILD_SUPPLEMENTARY_UNIT 0
+#endif
+
+#if !defined(BUILD_ENTRY_DEFINING_UNIT)
+# define BUILD_ENTRY_DEFINING_UNIT 1
+#endif
+
+#if !defined(BUILD_CONSOLE_INTERFACE)
+# define BUILD_CONSOLE_INTERFACE 0
+#endif
+
+#if !defined(BUILD_VERSION_MAJOR)
+# define BUILD_VERSION_MAJOR 0
+#endif
+
+#if !defined(BUILD_VERSION_MINOR)
+# define BUILD_VERSION_MINOR 9
+#endif
+
+#if !defined(BUILD_VERSION_PATCH)
+# define BUILD_VERSION_PATCH 15
+#endif
+
+#define BUILD_VERSION_STRING_LITERAL Stringify(BUILD_VERSION_MAJOR) "." Stringify(BUILD_VERSION_MINOR) "." Stringify(BUILD_VERSION_PATCH)
+#if BUILD_DEBUG
+# define BUILD_MODE_STRING_LITERAL_APPEND " [Debug]"
+#else
+# define BUILD_MODE_STRING_LITERAL_APPEND ""
+#endif
+#if defined(BUILD_GIT_HASH)
+# define BUILD_GIT_HASH_STRING_LITERAL_APPEND " [" BUILD_GIT_HASH "]"
+#else
+# define BUILD_GIT_HASH_STRING_LITERAL_APPEND ""
+#endif
+
+#if !defined(BUILD_TITLE)
+# define BUILD_TITLE "Untitled"
+#endif
+
+#if !defined(BUILD_RELEASE_PHASE_STRING_LITERAL)
+# define BUILD_RELEASE_PHASE_STRING_LITERAL "ALPHA"
+#endif
+
+//#if !defined(BUILD_ISSUES_LINK_STRING_LITERAL)
+//# define BUILD_ISSUES_LINK_STRING_LITERAL "https://github.com/EpicGamesExt/raddebugger/issues"
+//#endif
+
+#define BUILD_TITLE_STRING_LITERAL BUILD_TITLE " (" BUILD_VERSION_STRING_LITERAL " " BUILD_RELEASE_PHASE_STRING_LITERAL ") - " __DATE__ "" BUILD_GIT_HASH_STRING_LITERAL_APPEND BUILD_MODE_STRING_LITERAL_APPEND
+
+////////////////////////////////
+//~ rjf: Zero All Undefined Options
+
+#if !defined(ARCH_32BIT)
+# define ARCH_32BIT 0
+#endif
+#if !defined(ARCH_64BIT)
+# define ARCH_64BIT 0
+#endif
+#if !defined(ARCH_X64)
+# define ARCH_X64 0
+#endif
+#if !defined(ARCH_X86)
+# define ARCH_X86 0
+#endif
+#if !defined(ARCH_ARM64)
+# define ARCH_ARM64 0
+#endif
+#if !defined(ARCH_ARM32)
+# define ARCH_ARM32 0
+#endif
+#if !defined(COMPILER_MSVC)
+# define COMPILER_MSVC 0
+#endif
+#if !defined(COMPILER_GCC)
+# define COMPILER_GCC 0
+#endif
+#if !defined(COMPILER_CLANG)
+# define COMPILER_CLANG 0
+#endif
+#if !defined(OS_WINDOWS)
+# define OS_WINDOWS 0
+#endif
+#if !defined(OS_LINUX)
+# define OS_LINUX 0
+#endif
+#if !defined(OS_MAC)
+# define OS_MAC 0
+#endif
+#if !defined(LANG_CPP)
+# define LANG_CPP 0
+#endif
+#if !defined(LANG_C)
+# define LANG_C 0
+#endif
+
+////////////////////////////////
+//~ rjf: Unsupported Errors
+
+#if ARCH_X86
+# error You tried to build in x86 (32 bit) mode, but currently, only building in x64 (64 bit) mode is supported.
+#endif
+#if !ARCH_X64 && !ARCH_WEB64
+# error You tried to build with an unsupported architecture. Currently, only building in x64 mode is supported.
+#endif
+
+////////////////////////////////
+//~ rjf: Codebase Keywords
+
+#define internal      static
+#define global        static
+#define local_persist static
+
+#if COMPILER_MSVC || (COMPILER_CLANG && OS_WINDOWS)
+# pragma section(".rdata$", read)
+# define read_only __declspec(allocate(".rdata$"))
+#elif (COMPILER_CLANG && OS_LINUX)
+# define read_only __attribute__((section(".rodata")))
+#else
+// NOTE(rjf): I don't know of a useful way to do this in GCC land.
+// __attribute__((section(".rodata"))) looked promising, but it introduces a
+// strange warning about malformed section attributes, and it doesn't look
+// like writing to that section reliably produces access violations, strangely
+// enough. (It does on Clang)
+# define read_only
+#endif
+
+#if COMPILER_MSVC
+# define thread_static __declspec(thread)
+#elif COMPILER_CLANG || COMPILER_GCC
+# define thread_static __thread
+#endif
+
+#if COMPILER_MSVC
+# define force_inline __forceinline inline
+#elif COMPILER_CLANG || COMPILER_GCC
+# define force_inline __attribute__((always_inline)) inline
+#endif
+
+////////////////////////////////
+//~ rjf: Linkage Keyword Macros
+
+#if OS_WINDOWS
+# define shared_function C_LINKAGE __declspec(dllexport)
+#else
+# define shared_function C_LINKAGE
+#endif
+
+#if LANG_CPP
+# define C_LINKAGE_BEGIN extern "C"{
+# define C_LINKAGE_END }
+# define C_LINKAGE extern "C"
+#else
+# define C_LINKAGE_BEGIN
+# define C_LINKAGE_END
+# define C_LINKAGE
+#endif
+
+#if COMPILER_MSVC
+# define align_of(T) __alignof(T)
+#elif COMPILER_CLANG
+# define align_of(T) __alignof(T)
+#elif COMPILER_GCC
+# define align_of(T) __alignof__(T)
+#else
+# error align_of not defined for this compiler.
+#endif
+
+////////////////////////////////
+//~ rjf: Units
+
+#define KB(n)  (((u64)(n)) << 10)
+#define MB(n)  (((u64)(n)) << 20)
+#define GB(n)  (((u64)(n)) << 30)
+#define TB(n)  (((u64)(n)) << 40)
+#define THOUSAND(n)   ((n)*1000)
+#define MILLION(n)    ((n)*1000000)
+#define BILLION(n)    ((n)*1000000000)
+
 
 ////////////////////////////////
 //~ rjf: Asserts
@@ -96,6 +399,7 @@
 #define memory_set(dst, byte, size)    memset((dst), (byte), (size))
 #define memory_compare(a, b, size)     memcmp((a), (b), (size))
 #define memory_strlen(ptr)             strlen(ptr)
+#define memory_zero(dst, size) memory_set(dst, 0, size)
 
 #define memory_copy_struct(d,s)  memory_copy((d),(s),sizeof(*(d)))
 #define memory_copy_array(d,s)   memory_copy((d),(s),sizeof(d))
@@ -161,7 +465,6 @@ check_nil(nil,p) ? \
 //- rjf: singly-linked, singly-headed list helpers
 #define sll_stack_push(f,n) sll_stack_push_n(f,n,next)
 #define sll_stack_pop(f) sll_stack_pop_n(f,next)
-
 
 typedef int64_t  s64;
 typedef uint64_t u64;

@@ -1,29 +1,63 @@
 #ifndef JLIB_ARENA_H
 #define JLIB_ARENA_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdbool.h>
-#include <stdint.h>
+#include "basic.h"
+
+#define JLIB_ARENA_HEADER_SIZE 128
+
+typedef struct Arena_params Arena_params;
+struct Arena_params {
+  u64 size;
+  b32 cannot_chain;
+  void *optional_backing_buffer;
+};
 
 typedef struct Arena Arena;
-typedef struct Arena_save Arena_save;
+struct Arena {
+  Arena *prev;
+  Arena *cur;
+  b32 cannot_chain;
+  b32 has_backing_buffer;
+  // TODO virtual memory
+  //u64 reserve_size; // virtual memory reserved
+  u64 size;  // actual memory committed
+  u64 base_pos;
+  u64 pos;
+  u64 free_size;
+  Arena *free_last;
+};
 
-#define JLIB_ARENA_INITIAL_BLOCK_BYTES (1<<13) // 8K bytes
-#define JLIB_ARENA_TMP_INITIAL_BLOCK_BYTES (1<<11) // 2K bytes
+STATIC_ASSERT(sizeof(Arena) <= JLIB_ARENA_HEADER_SIZE, arena_header_size_check);
 
-#define arena_init(a) arena_init_full(a, false, JLIB_ARENA_INITIAL_BLOCK_BYTES)
-#define arena_tmp(a) arena_init_full(a, true, JLIB_ARENA_TMP_INITIAL_BLOCK_BYTES)
-void arena_init_full(Arena *a, bool cannot_grow, size_t initial_block_bytes);
-#define arena_alloc(a, bytes) arena_alloc_(a, bytes, 1)
-#define arena_alloc_no_zero(a, bytes) arena_alloc_(a, bytes, 0)
-void* arena_alloc_(Arena *a, size_t bytes, b8 zero_mem);
-Arena_save arena_to_save(Arena *a);
-void arena_from_save(Arena *a, Arena_save save);
-void arena_step_back(Arena *a, size_t bytes);
-void arena_reset(Arena *a);
-void arena_destroy(Arena *a);
+typedef struct Arena_scope Arena_scope;
+struct Arena_scope {
+  Arena *arena;
+  u64 pos;
+};
+
+
+global read_only u64 ARENA_DEFAULT_SIZE = KB(64);
+
+Arena* arena_alloc_(Arena_params *params);
+#define arena_alloc(...) arena_alloc_(&(Arena_params){ .size = ARENA_DEFAULT_SIZE, .cannot_chain = 0, __VA_ARGS__ })
+
+void arena_free(Arena *arena);
+
+void *arena_push(Arena *arena, u64 size, u64 align);
+u64   arena_pos(Arena *arena);
+void  arena_pop_to(Arena *arena, u64 pos);
+
+void arena_clear(Arena *arena);
+void arena_pop(Arena *arena, u64 amount);
+
+Arena_scope scope_begin(Arena *arena);
+void scope_end(Arena_scope scope);
+
+#define push_array_no_zero_aligned(a, T, n, align) (T *)arena_push((a), sizeof(T)*(n), (align))
+#define push_array_aligned(a, T, n, align) (T *)memory_zero(push_array_no_zero_aligned(a, T, n, align), sizeof(T)*(n))
+#define push_array_no_zero(a, T, n) push_array_no_zero_aligned(a, T, n, MAX(8, align_of(T)))
+#define push_array(a, T, n) push_array_aligned(a, T, n, MAX(8, align_of(T)))
+
 
 #endif
 
@@ -33,127 +67,147 @@ void arena_destroy(Arena *a);
 #define JLIB_ARENA_IMPL
 #endif
 
-#ifndef INLINE
-#define INLINE __attribute__((always_inline)) inline
-#endif
 
-INLINE uint64_t _round_pow_2(uint64_t n) {
-    --n;
-    n |= n >> 1;
-    n |= n >> 2;
-    n |= n >> 4;
-    n |= n >> 8;
-    n |= n >> 16;
-    n |= n >> 32;
-    ++n;
-    return n;
+#include "os.h"
+
+
+Arena* arena_alloc_(Arena_params *params) {
+  u64 size = ALIGN_UP(params->size, align_of(void*));
+  b32 cannot_chain = params->cannot_chain;
+  b32 has_backing_buffer = 0;
+  void *base = params->optional_backing_buffer;
+
+  if(base) {
+    cannot_chain = 1;
+    has_backing_buffer = 1;
+  } else {
+    base = os_alloc(size);
+    ASSERT(base);
+  }
+
+  Arena *arena = (Arena*)base;
+  arena->cur = arena;
+  arena->prev = 0;
+  arena->cannot_chain = cannot_chain;
+  arena->has_backing_buffer = has_backing_buffer;
+  arena->size = size;
+  arena->base_pos = 0;
+  arena->pos = JLIB_ARENA_HEADER_SIZE;
+  arena->free_size = 0;
+  arena->free_last = 0;
+
+  return arena;
 }
 
-struct Arena {
-    bool cannot_grow;
-    uint64_t pos;
-    uint64_t cur_block;
-    uint64_t n_blocks;
-    size_t *block_sizes;
-    uint8_t **blocks;
-};
+void arena_free(Arena *arena) {
+  if(arena->has_backing_buffer) return;
 
-struct Arena_save {
-    uint64_t pos;
-    uint64_t cur_block;
-};
+  for(Arena *a = arena->free_last, *prev = 0; a != 0; a = prev) {
+    prev = a->prev;
+    os_free((void*)a);
+  }
 
-INLINE void arena_init_full(Arena *a, bool cannot_grow, size_t initial_block_bytes) {
-    *a = (Arena){0};
-    a->cannot_grow = cannot_grow;
-    a->blocks = malloc(sizeof(uint8_t*));
-    a->block_sizes = malloc(sizeof(size_t));
-    a->n_blocks = 1;
-    a->blocks[0] = malloc(initial_block_bytes);
-    a->block_sizes[0] = initial_block_bytes;
+  for(Arena *a = arena->cur, *prev = 0; a != 0; a = prev) {
+    prev = a->prev;
+    os_free((void*)a);
+  }
+
 }
 
-INLINE uint64_t __arena_align_up(uint64_t offset, uint64_t align) {
-    if(align == 0) return offset;
-    
-    return (offset + align - 1) & ~(align - 1);
-}
+void *arena_push(Arena *arena, u64 size, u64 align) {
+  Arena *cur = arena->cur;
+  u64 pos = ALIGN_UP(cur->pos, align);
+  u64 new_pos = pos + size;
 
-INLINE uint64_t __arena_next_pow2(uint64_t n) {
-    n--;
-    n |= n >> 1;
-    n |= n >> 2;
-    n |= n >> 4;
-    n |= n >> 8;
-    n |= n >> 16;
-    n |= n >> 32;
-    n++;
-    return n;
-}
+  if(cur->size < new_pos && !cur->cannot_chain) {
+    Arena *new_arena = 0;
 
-//TODO make alignment an optional parameter
-INLINE void* arena_alloc_(Arena *a, size_t bytes, b8 zero_mem) {
-    if(bytes == 0) return NULL;
+    Arena *prev_arena;
 
-    if(bytes + a->pos >= a->block_sizes[a->cur_block]) {
-        if(a->cannot_grow) {
-            ASSERT(!"arena_alloc: arena capacity exceeded, crashing");
-            //fprintf(stderr, "arena_alloc: arena cannot grow so malloc(%zu) bytes\n", bytes);
-            //return malloc(bytes);
+    for(new_arena = arena->free_last, prev_arena = 0; new_arena != 0; prev_arena = new_arena, new_arena = new_arena->prev) {
+
+      if(new_arena->size >= ALIGN_UP(size, align)) {
+        if(prev_arena) {
+          prev_arena->prev = new_arena->prev;
+        } else {
+          arena->free_last = new_arena->prev;
         }
-        size_t new_block_size = a->block_sizes[a->cur_block] << 1;
-        while(new_block_size < bytes) new_block_size <<= 1;
-        a->cur_block++;
-        a->n_blocks++;
-        a->blocks = realloc(a->blocks, (a->cur_block + 1) * new_block_size);
-        a->block_sizes = realloc(a->block_sizes, (a->cur_block + 1) * sizeof(size_t));
-        a->blocks[a->cur_block] = malloc(new_block_size);
-        a->block_sizes[a->cur_block] = new_block_size;
-        a->pos = 0;
+        break;
+      }
+
     }
 
-    a->pos = __arena_align_up(a->pos, sizeof(void*));
-    void *ptr = a->blocks[a->cur_block] + a->pos;
-    a->pos += bytes;
+    if(new_arena == 0) {
+      u64 new_arena_size = cur->size;
 
-    if(zero_mem) {
-      memory_set(ptr, 0, bytes);
+      if(size + JLIB_ARENA_HEADER_SIZE > new_arena_size) {
+        new_arena_size = ALIGN_UP(size + JLIB_ARENA_HEADER_SIZE, align);
+      }
+
+      new_arena = arena_alloc(.size = new_arena_size);
     }
 
-    return ptr;
+    new_arena->base_pos = cur->base_pos + cur->size;
+
+    sll_stack_push_n(arena->cur, new_arena, prev);
+
+    cur = new_arena;
+    pos = ALIGN_UP(cur->pos, align);
+    new_pos = pos + size;
+
+  }
+
+  void *result = (u8*)cur + pos;
+  cur->pos = new_pos;
+
+  return result;
 }
 
-INLINE void arena_step_back(Arena *a, size_t bytes) {
-    while(bytes > a->pos) {
-        bytes -= a->pos;
-        a->cur_block--;
-        a->pos = a->block_sizes[a->cur_block];
-    }
-
-    a->pos -= bytes;
+u64 arena_pos(Arena *arena) {
+  Arena *cur = arena->cur;
+  u64 pos = cur->base_pos + cur->pos;
+  return pos;
 }
 
-INLINE void arena_reset(Arena *a) {
-    a->pos = a->cur_block = 0;
+void arena_pop_to(Arena *arena, u64 pos) {
+  u64 big_pos = CLAMP_BOT(JLIB_ARENA_HEADER_SIZE, pos);
+  Arena *cur = arena->cur;
+
+  for(Arena *prev = 0; cur->base_pos >= big_pos; cur = prev) {
+    prev = cur->prev;
+    cur->pos = JLIB_ARENA_HEADER_SIZE;
+    sll_stack_push_n(arena->free_last, cur, prev);
+  }
+
+  arena->cur = cur;
+  u64 new_pos = big_pos - cur->base_pos;
+  ASSERT(new_pos <= cur->pos);
+  cur->pos = new_pos;
 }
 
-INLINE void arena_destroy(Arena *a) {
-    if(a->blocks) {
-        for(uint64_t i = 0; i <= a->cur_block; ++i)
-            free(a->blocks[i]);
-        free(a->blocks);
-        free(a->block_sizes);
-    }
-    *a = (Arena){0};
+void arena_clear(Arena *arena) {
+  arena_pop_to(arena, 0);
 }
 
-INLINE Arena_save arena_to_save(Arena *a) {
-    return (Arena_save){ .pos = a->pos, .cur_block = a->cur_block };
+void arena_pop(Arena *arena, u64 amount) {
+  u64 old_pos = arena_pos(arena);
+  u64 new_pos = old_pos;
+  if(amount < old_pos) {
+    new_pos = old_pos - amount;
+  }
+  arena_pop_to(arena, new_pos);
 }
 
-INLINE void arena_from_save(Arena *a, Arena_save save) {
-    a->pos = save.pos;
-    a->cur_block = save.cur_block;
+Arena_scope scope_begin(Arena *arena) {
+  u64 pos = arena_pos(arena);
+  Arena_scope scope = { arena, pos };
+  return scope;
 }
+
+void scope_end(Arena_scope scope) {
+  arena_pop_to(scope.arena, scope.pos);
+}
+
+
 
 #endif

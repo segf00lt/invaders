@@ -69,22 +69,24 @@ Str8 str8_to_lower(Arena *a, Str8 str);
 #define letter_index(c) ((s64)(to_lower(c) - 'a'))
 #define hexdigit_to_int(c) ((s64)(is_alpha(c) ? (to_lower(c) - 'a' + 0xa) : (c - '0')))
 
+#endif
+
+#if defined(JLIB_STR_IMPL) != defined(_UNITY_BUILD_)
+
 #ifdef _UNITY_BUILD_
 #define JLIB_STR_IMPL
 #endif
 
-#ifdef JLIB_STR_IMPL
-
 #include "stb_sprintf.h"
 
-INLINE void str8_list_append_node_(Str8_list *list, Str8_node *node) {
+force_inline void str8_list_append_node_(Str8_list *list, Str8_node *node) {
   sll_queue_push(list->first, list->last, node);
   list->count++;
   list->total_len += node->str.len;
 }
 
 void str8_list_append_string_(Arena *a, Str8_list *list, Str8 str) {
-  Str8_node *node = arena_alloc_no_zero(a, sizeof(Str8_node));
+  Str8_node *node = push_array_no_zero(a, Str8_node, 1);
   node->str = str;
   node->next = 0;
   sll_queue_push(list->first, list->last, node);
@@ -96,7 +98,7 @@ Str8_list push_str8_list_copy(Arena *a, Str8_list list) {
   Str8_list result = {0};
 
   for(Str8_node *node = list.first; node; node = node->next) {
-    Str8_node *new_node = arena_alloc_no_zero(a, sizeof(Str8_node));
+    Str8_node *new_node = push_array_no_zero(a, Str8_node, 1);
     new_node->str = node->str;
     new_node->next = 0;
     str8_list_append_node_(&result, new_node);
@@ -173,13 +175,13 @@ b32 str8_is_decimal(Str8 str) {
 }
 
 Str8 push_str8_copy(Arena *a, Str8 str) {
-  u8 *s = arena_alloc_no_zero(a, str.len + 1);
+  u8 *s = push_array_no_zero(a, u8, str.len + 1);
   memory_copy(s, str.s, str.len);
   s[str.len] = 0;
   return (Str8){ .s = s, .len = str.len };
 }
 
-INLINE Str8 push_str8_copy_cstr(Arena *a, char *cstr) {
+force_inline Str8 push_str8_copy_cstr(Arena *a, char *cstr) {
   Str8 str = { .s = (u8*)cstr, .len = memory_strlen(cstr) };
   return push_str8_copy(a, str);
 }
@@ -189,7 +191,7 @@ Str8 push_str8fv(Arena *a, char *fmt, va_list args){
   va_copy(args2, args);
   u32 needed_bytes = stbsp_vsnprintf(0, 0, fmt, args) + 1;
   Str8 result = {0};
-  result.s = arena_alloc_no_zero(a, needed_bytes);
+  result.s = push_array_no_zero(a, u8, needed_bytes);
   result.len = stbsp_vsnprintf((char*)result.s, needed_bytes, fmt, args2);
   result.s[result.len] = 0;
   va_end(args2);
@@ -249,7 +251,7 @@ Str8_list str8_split_by_chars(Arena *a, Str8 str, u8 *sep_chars, s64 n_sep_chars
         i += 1;
         begin = i;
       } else {
-        node->next = arena_alloc_no_zero(a, sizeof(Str8_node));
+        node->next = push_array_no_zero(a, Str8_node, 1);
         node = node->next;
         node->str.s = str.s + begin;
         node->str.len = i - begin;
@@ -268,7 +270,7 @@ Str8_list str8_split_by_chars(Arena *a, Str8 str, u8 *sep_chars, s64 n_sep_chars
   }
 
   if(begin < i) {
-    node->next = arena_alloc_no_zero(a, sizeof(Str8_node));
+    node->next = push_array_no_zero(a, Str8_node, 1);
     node = node->next;
     node->str.s = str.s + begin;
     node->str.len = i - begin;
@@ -284,7 +286,7 @@ Str8_list str8_split_by_chars(Arena *a, Str8 str, u8 *sep_chars, s64 n_sep_chars
   return result;
 }
 
-INLINE Str8_list str8_split_by_char(Arena *a, Str8 str, u8 sep_char) {
+force_inline Str8_list str8_split_by_char(Arena *a, Str8 str, u8 sep_char) {
   return str8_split_by_chars(a, str, &sep_char, 1);
 }
 
@@ -312,7 +314,7 @@ Str8_list str8_split_by_string(Arena *a, Str8 str, Str8 sep) {
         i += j;
         begin = i;
       } else {
-        node->next = arena_alloc_no_zero(a, sizeof(Str8_node));
+        node->next = push_array_no_zero(a, Str8_node, 1);
         node = node->next;
         node->str.s = str.s + begin;
         node->str.len = i - begin;
@@ -331,7 +333,7 @@ Str8_list str8_split_by_string(Arena *a, Str8 str, Str8 sep) {
   }
 
   if(begin < i) {
-    node->next = arena_alloc_no_zero(a, sizeof(Str8_node));
+    node->next = push_array_no_zero(a, Str8_node, 1);
     node = node->next;
     node->str.s = str.s + begin;
     node->str.len = i - begin;
@@ -347,7 +349,5 @@ Str8_list str8_split_by_string(Arena *a, Str8 str, Str8 sep) {
   return result;
 }
 
-
-#endif
 
 #endif
