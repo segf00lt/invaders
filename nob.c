@@ -253,10 +253,10 @@ int main(int argc, char **argv) {
   //if(!build_raylib_web()) return 1;
   //if(!build_raylib_static()) return 1;
   //if(!build_raylib_shared()) return 1;
-  if(!build_metaprogram()) return 1;
+  //if(!build_metaprogram()) return 1;
   //if(!build_wasm()) return 1;
-  if(!build_hot_reload()) return 1;
-  //if(!build_static()) return 1;
+  //if(!build_hot_reload()) return 1;
+  if(!build_static()) return 1;
 
   return 0;
 }
