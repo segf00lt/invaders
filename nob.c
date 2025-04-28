@@ -52,10 +52,11 @@ int build_raylib(void);
 int build_raylib_static(void);
 int build_raylib_shared(void);
 int build_raylib_web(void);
+int generate_vim_project_file(void);
 
 Arena *scratch;
 
-#ifdef _WIN32
+#ifdef OS_WINDOWS
 char project_root_path[MAX_PATH];
 #else
 char project_root_path[PATH_MAX];
@@ -233,6 +234,55 @@ int run_tags(void) {
 }
 
 
+#ifdef OS_WINDOWS
+#error "windows support not implemented"
+#elif defined(OS_MAC)
+
+#define VIM_PROJECT_FILE \
+  "let project_root = getcwd()\n"\
+"let project_build = project_root . '/nob'\n"\
+"let project_exe = '/invaders'\n"\
+"let project_run = project_root . project_exe\n"\
+"let project_debug = 'code ' . project_root\n"\
+"\n" \
+"let &makeprg = project_build\n"\
+"\n"\
+"nnoremap <F7> :call jobstart('open -a Terminal ' . project_root, { 'detach':v:true })<CR>\n"\
+"nnoremap <F8> :call chdir(project_root)<CR>\n"\
+"nnoremap <F9> :wa<CR>:make<CR>\n"\
+"nnoremap <F10> :call jobstart(project_run, { 'detach':v:true })<CR>\n"\
+"nnoremap <F11> :call jobstart(project_debug, { 'detach':v:true })<CR>\n"\
+
+#elif defined(OS_LINUX)
+
+#define VIM_PROJECT_FILE \
+  "let project_root = getcwd()\n"\
+"let project_build = project_root . '/nob'\n"\
+"let project_exe = '/invaders'\n"\
+"let project_run = project_root . project_exe\n"\
+"let project_debug = 'gf2 ' . project_root . project_exe\n"\
+"\n"\
+"let &makeprg = project_build\n"\
+"\n"\
+"nnoremap <F7> :call jobstart('alacritty --working-directory ' . project_root, { 'detach':v:true })<CR>\n"\
+"nnoremap <F8> :call chdir(project_root)<CR>\n"\
+"nnoremap <F9> :wa<CR>:make<CR>\n"\
+"nnoremap <F10> :call jobstart(project_run, { 'detach':v:true })<CR>\n"\
+"nnoremap <F11> :call jobstart(project_debug, { 'detach':v:true })<CR>\n"\
+
+#else
+#error "unsupported operating system"
+#endif
+
+char project_file[] = VIM_PROJECT_FILE;
+
+int generate_vim_project_file(void) {
+  Str8 path_str = push_str8f(scratch, "%s/.project.vim", project_root_path);
+  nob_write_entire_file((char*)path_str.s, project_file, memory_strlen(project_file));
+  return 1;
+}
+
+
 int main(int argc, char **argv) {
 
   { /* set project_root_path from argv[0] */
@@ -250,13 +300,14 @@ int main(int argc, char **argv) {
 
   scratch = arena_alloc();
 
+  if(!generate_vim_project_file()) return 1;
   //if(!build_raylib_web()) return 1;
   //if(!build_raylib_static()) return 1;
   //if(!build_raylib_shared()) return 1;
   //if(!build_metaprogram()) return 1;
   //if(!build_wasm()) return 1;
   //if(!build_hot_reload()) return 1;
-  if(!build_static()) return 1;
+  //if(!build_static()) return 1;
 
   return 0;
 }
