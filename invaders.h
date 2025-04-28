@@ -1,9 +1,9 @@
 #ifndef INVADERS_H
 #define INVADERS_H
 
-#include <raylib.h>
-#include <raymath.h>
-#include <rlgl.h>
+#include "third_party/raylib/raylib.h"
+#include "third_party/raylib/raymath.h"
+#include "third_party/raylib/rlgl.h"
 
 #include "basic.h"
 #include "arena.h"
