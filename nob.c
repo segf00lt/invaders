@@ -47,7 +47,12 @@ int build_raylib_shared(void);
 int build_raylib_web(void);
 
 Arena *scratch;
-char *root_path;
+
+#ifdef _WIN32
+char project_root_path[MAX_PATH];
+#else
+char project_root_path[PATH_MAX];
+#endif
 
 int build_raylib(void) {
   nob_log(NOB_INFO, "building raylib");
@@ -74,7 +79,7 @@ int build_raylib(void) {
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_WEB");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  ASSERT(nob_set_current_dir(root_path));
+  ASSERT(nob_set_current_dir(project_root_path));
 
   return 1;
 }
@@ -92,7 +97,7 @@ int build_raylib_static(void) {
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  ASSERT(nob_set_current_dir(root_path));
+  ASSERT(nob_set_current_dir(project_root_path));
 
   return 1;
 }
@@ -110,7 +115,7 @@ int build_raylib_shared(void) {
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP", "RAYLIB_LIBTYPE=SHARED");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  ASSERT(nob_set_current_dir(root_path));
+  ASSERT(nob_set_current_dir(project_root_path));
 
   return 1;
 }
@@ -128,7 +133,7 @@ int build_raylib_web(void) {
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_WEB");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  ASSERT(nob_set_current_dir(root_path));
+  ASSERT(nob_set_current_dir(project_root_path));
 
   return 1;
 }
@@ -211,10 +216,10 @@ int build_wasm(void) {
 int run_tags(void) {
   Nob_Cmd cmd = {0};
 
-  nob_cmd_append(&cmd, "ctags", "-w", "--language-force=c", "--c-kinds=+zfx", "--extras=+q", "--fields=+n", "--exclude='*.h'", "--exclude=third_party", "-R");
+  nob_cmd_append(&cmd, "ctags", "-w", "--sort=yes", "--language-force=c", "--c-kinds=+zfx", "--extras=+q", "--fields=+n", "--exclude='*.h'", "--exclude=third_party", "-R");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  nob_cmd_append(&cmd, "ctags", "-w", "--language-force=c", "--c-kinds=+zpx", "--extras=+q", "--fields=+n", "-a", "--recurse", RAYLIB_HEADERS);
+  nob_cmd_append(&cmd, "ctags", "-w", "--sort=yes", "--language-force=c", "--c-kinds=+zpx", "--extras=+q", "--fields=+n", "-a", "--recurse", RAYLIB_HEADERS);
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   return 1;
@@ -223,16 +228,20 @@ int run_tags(void) {
 
 int main(int argc, char **argv) {
 
+  { /* set project_root_path from argv[0] */
+    int exe_name_len = memory_strlen(argv[0]);
+    int i;
+    for(i = 0; i < exe_name_len - STRLEN("/nob"); i++) {
+      project_root_path[i] = argv[0][i];
+    }
+    project_root_path[i] = 0;
+  }
+
+  nob_set_current_dir(project_root_path);
+
   NOB_GO_REBUILD_URSELF(argc, argv);
 
   scratch = arena_alloc();
-
-  {
-    const char *dir_tmp = nob_get_current_dir_temp();
-    int len = memory_strlen(dir_tmp);
-    root_path = push_array(scratch, char, len + 1);
-    memory_copy(root_path, dir_tmp, len);
-  }
 
   //if(!build_raylib_web()) return 1;
   //if(!build_raylib_static()) return 1;
