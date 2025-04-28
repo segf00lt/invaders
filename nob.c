@@ -240,35 +240,35 @@ int run_tags(void) {
 
 #define VIM_PROJECT_FILE \
   "let project_root = getcwd()\n"\
-"let project_build = project_root . '/nob'\n"\
-"let project_exe = '/invaders'\n"\
-"let project_run = project_root . project_exe\n"\
-"let project_debug = 'code ' . project_root\n"\
-"\n" \
-"let &makeprg = project_build\n"\
-"\n"\
-"nnoremap <F7> :call jobstart('open -a Terminal ' . project_root, { 'detach':v:true })<CR>\n"\
-"nnoremap <F8> :call chdir(project_root)<CR>\n"\
-"nnoremap <F9> :wa<CR>:make<CR>\n"\
-"nnoremap <F10> :call jobstart(project_run, { 'detach':v:true })<CR>\n"\
-"nnoremap <F11> :call jobstart(project_debug, { 'detach':v:true })<CR>\n"\
+  "let project_build = project_root . '/nob'\n"\
+  "let project_exe = '/invaders'\n"\
+  "let project_run = project_root . project_exe\n"\
+  "let project_debug = 'code ' . project_root\n"\
+  "\n" \
+  "let &makeprg = project_build\n"\
+  "\n"\
+  "nnoremap <F7> :call jobstart('open -a Terminal ' . project_root, { 'detach':v:true })<CR>\n"\
+  "nnoremap <F8> :call chdir(project_root)<CR>\n"\
+  "nnoremap <F9> :wa<CR>:make<CR>\n"\
+  "nnoremap <F10> :call jobstart(project_run, { 'detach':v:true })<CR>\n"\
+  "nnoremap <F11> :call jobstart(project_debug, { 'detach':v:true })<CR>\n"\
 
 #elif defined(OS_LINUX)
 
 #define VIM_PROJECT_FILE \
   "let project_root = getcwd()\n"\
-"let project_build = project_root . '/nob'\n"\
-"let project_exe = '/invaders'\n"\
-"let project_run = project_root . project_exe\n"\
-"let project_debug = 'gf2 ' . project_root . project_exe\n"\
-"\n"\
-"let &makeprg = project_build\n"\
-"\n"\
-"nnoremap <F7> :call jobstart('alacritty --working-directory ' . project_root, { 'detach':v:true })<CR>\n"\
-"nnoremap <F8> :call chdir(project_root)<CR>\n"\
-"nnoremap <F9> :wa<CR>:make<CR>\n"\
-"nnoremap <F10> :call jobstart(project_run, { 'detach':v:true })<CR>\n"\
-"nnoremap <F11> :call jobstart(project_debug, { 'detach':v:true })<CR>\n"\
+  "let project_build = project_root . '/nob'\n"\
+  "let project_exe = '/invaders'\n"\
+  "let project_run = project_root . project_exe\n"\
+  "let project_debug = 'gf2 ' . project_root . project_exe\n"\
+  "\n"\
+  "let &makeprg = project_build\n"\
+  "\n"\
+  "nnoremap <F7> :call jobstart('alacritty --working-directory ' . project_root, { 'detach':v:true })<CR>\n"\
+  "nnoremap <F8> :call chdir(project_root)<CR>\n"\
+  "nnoremap <F9> :wa<CR>:make<CR>\n"\
+  "nnoremap <F10> :call jobstart(project_run, { 'detach':v:true })<CR>\n"\
+  "nnoremap <F11> :call jobstart(project_debug, { 'detach':v:true })<CR>\n"\
 
 #else
 #error "unsupported operating system"
@@ -300,14 +300,14 @@ int main(int argc, char **argv) {
 
   scratch = arena_alloc();
 
-  if(!generate_vim_project_file()) return 1;
+  //if(!generate_vim_project_file()) return 1;
   //if(!build_raylib_web()) return 1;
   //if(!build_raylib_static()) return 1;
   //if(!build_raylib_shared()) return 1;
   //if(!build_metaprogram()) return 1;
   //if(!build_wasm()) return 1;
   //if(!build_hot_reload()) return 1;
-  //if(!build_static()) return 1;
+  if(!build_static()) return 1;
 
   return 0;
 }
