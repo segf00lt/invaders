@@ -15,6 +15,14 @@
 #define EXE "invaders"
 #define LDFLAGS "-lraylib", "-lm"
 
+#if defined(OS_MAC)
+#define CTAGS "/opt/homebrew/bin/ctags"
+#elif defined(OS_LINUX)
+#define CTAGS "/usr/bin/ctags"
+#else
+#error "unsupported operating system"
+#endif
+
 #ifdef __MACH__
 #define STATIC_BUILD_LDFLAGS "-lm", "-framework", "IOKit", "-framework", "Cocoa", "-framework", "OpenGL"
 #else
@@ -224,10 +232,10 @@ int build_wasm(void) {
 int run_tags(void) {
   Nob_Cmd cmd = {0};
 
-  nob_cmd_append(&cmd, "ctags", "-w", "--sort=yes", "--language-force=c", "--c-kinds=+zfx", "--extras=+q", "--fields=+n", "--exclude='*.h'", "--exclude=third_party", "-R");
+  nob_cmd_append(&cmd, CTAGS, "-w", "--sort=yes", "--language-force=c", "--c-kinds=+zfx", "--extras=+q", "--fields=+n", "--exclude='*.h'", "--exclude=third_party", "-R");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  nob_cmd_append(&cmd, "ctags", "-w", "--sort=yes", "--language-force=c", "--c-kinds=+zpx", "--extras=+q", "--fields=+n", "-a", "--recurse", RAYLIB_HEADERS);
+  nob_cmd_append(&cmd, CTAGS, "-w", "--sort=yes", "--language-force=c", "--c-kinds=+zpx", "--extras=+q", "--fields=+n", "-a", "--recurse", RAYLIB_HEADERS);
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   return 1;
@@ -243,7 +251,7 @@ int run_tags(void) {
   "let project_build = project_root . '/nob'\n"\
   "let project_exe = '/invaders'\n"\
   "let project_run = project_root . project_exe\n"\
-  "let project_debug = 'code ' . project_root\n"\
+  "let project_debug = 'open -a Visual\\ Studio\\ Code ' . project_root\n"\
   "\n" \
   "let &makeprg = project_build\n"\
   "\n"\
