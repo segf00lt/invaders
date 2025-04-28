@@ -1,4 +1,4 @@
-#include <raylib.h>
+#include "third_party/raylib/raylib.h"
 #include "basic.h"
 #include "arena.h"
 #include "str.h"

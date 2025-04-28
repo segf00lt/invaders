@@ -113,6 +113,146 @@
 #endif
 
 ////////////////////////////////
+<<<<<<< HEAD
+=======
+//~ rjf: Arch Cracking
+
+#if defined(ARCH_X64) || defined(ARCH_WEB64)
+# define ARCH_64BIT 1
+#elif defined(ARCH_X86)
+# define ARCH_32BIT 1
+#endif
+
+#if ARCH_ARM32 || ARCH_ARM64 || ARCH_X64 || ARCH_X86 || ARCH_WEB64
+# define ARCH_LITTLE_ENDIAN 1
+#else
+# error Endianness of this architecture not understood by context cracker.
+#endif
+
+////////////////////////////////
+//~ rjf: Language Cracking
+
+#if defined(__cplusplus)
+# define LANG_CPP 1
+#else
+# define LANG_C 1
+#endif
+
+////////////////////////////////
+//~ rjf: Build Option Cracking
+
+#if !defined(BUILD_DEBUG)
+# define BUILD_DEBUG 1
+#endif
+
+#if !defined(BUILD_SUPPLEMENTARY_UNIT)
+# define BUILD_SUPPLEMENTARY_UNIT 0
+#endif
+
+#if !defined(BUILD_ENTRY_DEFINING_UNIT)
+# define BUILD_ENTRY_DEFINING_UNIT 1
+#endif
+
+#if !defined(BUILD_CONSOLE_INTERFACE)
+# define BUILD_CONSOLE_INTERFACE 0
+#endif
+
+#if !defined(BUILD_VERSION_MAJOR)
+# define BUILD_VERSION_MAJOR 0
+#endif
+
+#if !defined(BUILD_VERSION_MINOR)
+# define BUILD_VERSION_MINOR 9
+#endif
+
+#if !defined(BUILD_VERSION_PATCH)
+# define BUILD_VERSION_PATCH 15
+#endif
+
+#define BUILD_VERSION_STRING_LITERAL Stringify(BUILD_VERSION_MAJOR) "." Stringify(BUILD_VERSION_MINOR) "." Stringify(BUILD_VERSION_PATCH)
+#if BUILD_DEBUG
+# define BUILD_MODE_STRING_LITERAL_APPEND " [Debug]"
+#else
+# define BUILD_MODE_STRING_LITERAL_APPEND ""
+#endif
+#if defined(BUILD_GIT_HASH)
+# define BUILD_GIT_HASH_STRING_LITERAL_APPEND " [" BUILD_GIT_HASH "]"
+#else
+# define BUILD_GIT_HASH_STRING_LITERAL_APPEND ""
+#endif
+
+#if !defined(BUILD_TITLE)
+# define BUILD_TITLE "Untitled"
+#endif
+
+#if !defined(BUILD_RELEASE_PHASE_STRING_LITERAL)
+# define BUILD_RELEASE_PHASE_STRING_LITERAL "ALPHA"
+#endif
+
+//#if !defined(BUILD_ISSUES_LINK_STRING_LITERAL)
+//# define BUILD_ISSUES_LINK_STRING_LITERAL "https://github.com/EpicGamesExt/raddebugger/issues"
+//#endif
+
+#define BUILD_TITLE_STRING_LITERAL BUILD_TITLE " (" BUILD_VERSION_STRING_LITERAL " " BUILD_RELEASE_PHASE_STRING_LITERAL ") - " __DATE__ "" BUILD_GIT_HASH_STRING_LITERAL_APPEND BUILD_MODE_STRING_LITERAL_APPEND
+
+////////////////////////////////
+//~ rjf: Zero All Undefined Options
+
+#if !defined(ARCH_32BIT)
+# define ARCH_32BIT 0
+#endif
+#if !defined(ARCH_64BIT)
+# define ARCH_64BIT 0
+#endif
+#if !defined(ARCH_X64)
+# define ARCH_X64 0
+#endif
+#if !defined(ARCH_X86)
+# define ARCH_X86 0
+#endif
+#if !defined(ARCH_ARM64)
+# define ARCH_ARM64 0
+#endif
+#if !defined(ARCH_ARM32)
+# define ARCH_ARM32 0
+#endif
+#if !defined(COMPILER_MSVC)
+# define COMPILER_MSVC 0
+#endif
+#if !defined(COMPILER_GCC)
+# define COMPILER_GCC 0
+#endif
+#if !defined(COMPILER_CLANG)
+# define COMPILER_CLANG 0
+#endif
+#if !defined(OS_WINDOWS)
+# define OS_WINDOWS 0
+#endif
+#if !defined(OS_LINUX)
+# define OS_LINUX 0
+#endif
+#if !defined(OS_MAC)
+# define OS_MAC 0
+#endif
+#if !defined(LANG_CPP)
+# define LANG_CPP 0
+#endif
+#if !defined(LANG_C)
+# define LANG_C 0
+#endif
+
+////////////////////////////////
+//~ rjf: Unsupported Errors
+
+#if ARCH_X86
+# error You tried to build in x86 (32 bit) mode, but currently, only building in x64 (64 bit) mode is supported.
+#endif
+#if !ARCH_X64 && !ARCH_WEB64 && !ARCH_ARM64
+# error You tried to build with an unsupported architecture. Currently, only building in x64 mode is supported.
+#endif
+
+////////////////////////////////
+>>>>>>> d1ce493 (stuff)
 //~ rjf: Codebase Keywords
 
 #define internal      static

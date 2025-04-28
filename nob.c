@@ -14,6 +14,13 @@
 #define TARGET "invaders.c"
 #define EXE "invaders"
 #define LDFLAGS "-lraylib", "-lm"
+
+#ifdef __MACH__
+#define STATIC_BUILD_LDFLAGS "-lm", "-framework", "IOKit", "-framework", "Cocoa", "-framework", "OpenGL"
+#else
+#define STATIC_BUILD_LDFLAGS "-lm"
+#endif
+
 #define METAPROGRAM_EXE "metaprogram"
 
 #ifdef __MACH__
@@ -144,7 +151,7 @@ int build_metaprogram(void) {
   run_tags();
 
   Nob_Cmd cmd = {0};
-  nob_cmd_append(&cmd, CC, DEV_FLAGS, "-fPIC", "metaprogram.c", "-o", METAPROGRAM_EXE, LDFLAGS);
+  nob_cmd_append(&cmd, CC, DEV_FLAGS, "-fPIC", "metaprogram.c", "-o", METAPROGRAM_EXE, RAYLIB_STATIC_LINK_OPTIONS, STATIC_BUILD_LDFLAGS);
 
   if(!nob_cmd_run_sync(cmd)) return 0;
 
@@ -189,7 +196,7 @@ int build_static(void) {
 
   nob_log(NOB_INFO, "building in static mode");
 
-  nob_cmd_append(&cmd, CC, DEV_FLAGS, "static_main.c", RAYLIB_STATIC_LINK_OPTIONS, "-o", EXE, "-lm");
+  nob_cmd_append(&cmd, CC, DEV_FLAGS, "static_main.c", RAYLIB_STATIC_LINK_OPTIONS, "-o", EXE, STATIC_BUILD_LDFLAGS);
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   return 1;
@@ -246,9 +253,9 @@ int main(int argc, char **argv) {
   //if(!build_raylib_web()) return 1;
   //if(!build_raylib_static()) return 1;
   //if(!build_raylib_shared()) return 1;
-  //if(!build_metaprogram()) return 1;
-  if(!build_wasm()) return 1;
-  //if(!build_hot_reload()) return 1;
+  if(!build_metaprogram()) return 1;
+  //if(!build_wasm()) return 1;
+  if(!build_hot_reload()) return 1;
   //if(!build_static()) return 1;
 
   return 0;

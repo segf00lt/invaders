@@ -144,7 +144,8 @@ void *arena_push(Arena *arena, u64 size, u64 align) {
         new_arena_size = ALIGN_UP(size + JLIB_ARENA_HEADER_SIZE, align);
       }
 
-      new_arena = arena_alloc(.size = new_arena_size);
+      Arena_params params = { .size = new_arena_size };
+      new_arena = arena_alloc_(&params);
     }
 
     new_arena->base_pos = cur->base_pos + cur->size;
