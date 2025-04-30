@@ -30,15 +30,28 @@ b32 os_move_file(Str8 old_path, Str8 new_path);
 #endif
 
 #if defined(OS_LINUX)
+
+#include <limits.h>
+#include <unistd.h>
+
 #define OS_PATH_LEN PATH_MAX
+
 #elif defined(OS_WEB)
 
 #define OS_PATH_LEN PATH_MAX
 
 #elif defined(OS_MAC)
+
+#include <limits.h>
+#include <unistd.h>
+#include <sys/param.h>
+
 #define OS_PATH_LEN MAXPATHLEN
+
 #elif defined(OS_WINDOWS)
+
 #define OS_PATH_LEN MAX_PATH
+
 #endif
 
 b32 os_set_current_dir(Str8 dir_path) {
@@ -53,9 +66,6 @@ b32 os_set_current_dir(Str8 dir_path) {
 }
 
 #if defined(OS_LINUX) || defined(OS_MAC) || defined(OS_WEB)
-
-#include <limits.h>
-#include <unistd.h>
 
 void* os_alloc(u64 size) {
   return malloc(size);

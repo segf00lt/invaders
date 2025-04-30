@@ -275,7 +275,9 @@ int run_tags(void) {
 
 
 #ifdef OS_WINDOWS
+
 #error "windows support not implemented"
+
 #elif defined(OS_MAC)
 
 char project_file[] =
@@ -342,7 +344,7 @@ int main(int argc, char **argv) {
 
   NOB_GO_REBUILD_URSELF(argc, argv);
 
-  //if(!generate_vim_project_file()) return 1;
+  if(!generate_vim_project_file()) return 1;
   //if(!build_raylib_web()) return 1;
   //if(!build_raylib_static()) return 1;
   //if(!build_raylib_shared()) return 1;
