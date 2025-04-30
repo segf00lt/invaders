@@ -8,6 +8,7 @@
 #include "basic.h"
 #include "arena.h"
 #include "str.h"
+#include "context.h"
 #include "array.h"
 #include "sprite.h"
 #include "stb_sprintf.h"
@@ -20,7 +21,7 @@
 
 #define WINDOW_SCALE 400
 #define WINDOW_WIDTH  (4*WINDOW_SCALE)
-#define WINDOW_HEIGHT (3*WINDOW_SCALE)
+#define WINDOW_HEIGHT (5*WINDOW_SCALE)
 
 #define BACKGROUND_SCALE ((float)4.0f)
 
@@ -60,7 +61,7 @@
 #define PLAYER_HEALTH_ICON_SPRITE_SCALE ((float)2.0f)
 
 #define PLAYER_COLLISION_MASK \
-  ((Entity_kind_mask)(ENTITY_KIND_MASK_HEALTH_PACK | ENTITY_KIND_MASK_SHIELDS_PICKUP | 0))
+  ((Entity_kind_mask)(ENTITY_KIND_MASK_HEALTH_PACK | ENTITY_KIND_MASK_SHIELDS_PICKUP))
 
 #define PLAYER_DAMAGE_BLINK_PERIOD ((float)0.03f)
 #define PLAYER_DAMAGE_BLINK_TOTAL_TIME ((float)1.2f)
@@ -72,9 +73,9 @@
 #define PLAYER_MISSILE_COLOR RED
 #define PLAYER_MISSILE_SIZE ((Vector2){ 14, 32 })
 #define PLAYER_MISSILE_SPAWN_OFFSET ((Vector2){ 0, -0.5f*(PLAYER_MISSILE_SIZE.y + PLAYER_BOUNDS_SIZE.y) })
-#define PLAYER_MISSILE_VELOCITY ((Vector2){ 0, -1200 })
+#define PLAYER_MISSILE_VELOCITY ((Vector2){ 0, -1700 })
 #define PLAYER_MISSILE_COLLISION_MASK \
-  ((Entity_kind_mask)(ENTITY_KIND_MASK_INVADER |  0))
+  ((Entity_kind_mask)(ENTITY_KIND_MASK_INVADER))
 #define PLAYER_MISSILE_DAMAGE 1
 #define PLAYER_MISSILE_SPRITE_SCALE ((float)4.0f)
 
@@ -98,6 +99,8 @@
 #define ENEMY_FORMATION_ENTER_LEVEL_SPEED ((float)300)
 #define ENEMY_FORMATION_STRAFE_PADDING ((float)15.0)
 
+#define ENEMY_FORMATION_TRIGGER_KAMIKAZE_TIME ((float)6.0f)
+
 #define INVADER_HEALTH 1
 #define INVADER_TOTAL_SHOOTING_TIME_LONG ((float)0.11f)
 #define INVADER_TOTAL_SHOOTING_TIME_SHORT ((float)0.5f)
@@ -111,10 +114,14 @@
 #define INVADER_MISSILE_SIZE ((Vector2){ 16, 30 })
 #define INVADER_MISSILE_COLOR ((Color){ 0, 216, 70, 255 })
 #define INVADER_MISSILE_SPAWN_OFFSET ((Vector2){ 0, 0.5f*(INVADER_MISSILE_SIZE.y + INVADER_BOUNDS_SIZE.y) })
-#define INVADER_MISSILE_VELOCITY ((Vector2){ 0, 820 })
-#define INVADER_MISSILE_COLLISION_MASK ((Entity_kind_mask)(ENTITY_KIND_MASK_PLAYER | 0))
+#define INVADER_MISSILE_VELOCITY ((Vector2){ 0, 950 })
+#define INVADER_MISSILE_COLLISION_MASK ((Entity_kind_mask)(ENTITY_KIND_MASK_PLAYER))
 #define INVADER_MISSILE_DAMAGE 1
 #define INVADER_MISSILE_SPRITE_SCALE ((float)3.0f)
+
+#define INVADER_KAMIKAZE_DAMAGE 2
+#define INVADER_KAMIKAZE_COLLISION_MASK ((Entity_kind_mask)(ENTITY_KIND_MASK_PLAYER))
+#define INVADER_KAMIKAZE_SPEED ((float)700.0f)
 
 #define HEALTH_PACK_SIZE ((Vector2){ 50, 50 })
 #define HEALTH_PACK_INITIAL_Y ((float)-80.0f)
@@ -212,6 +219,7 @@
   X(ENEMY_FORMATION_ENTER_LEVEL)   \
   X(ENEMY_FORMATION_MAIN)          \
   X(INVADER_IN_FORMATION)          \
+  X(INVADER_KAMIKAZE)              \
   X(MISSILE)                       \
   X(HEALTH_PACK)                   \
   X(SHIELDS_PICKUP)                \
@@ -407,6 +415,8 @@ struct Entity {
   u64     formation_id;
 
   float formation_trigger_enemy_shoot_delay;
+  int   formation_initial_enemy_count;
+  float formation_trigger_enemy_kamikaze_timer;
 
   Missile_launcher missile_launcher;
 
@@ -418,6 +428,12 @@ struct Entity {
   float enemy_total_shooting_time;
   float enemy_wait_after_shooting_time;
   b32   enemy_do_spit_animation;
+
+  Vector2 kamikaze_orbit_center;
+  float   kamikaze_orbit_angular_vel;
+  float   kamikaze_start_orbiting_delay;
+  float   kamikaze_orbit_radius;
+  b32     kamikaze_orbiting;
 
   int health;
   int received_damage;
@@ -562,6 +578,10 @@ void entity_init_invader_in_formation(Game *gp, Entity *ep, u64 formation_id, Ve
 void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher launcher);
 void entity_init_health_pack(Game *gp, Entity *ep);
 void entity_init_shields_pickup(Game *gp, Entity *ep);
+
+void invader_go_kamikaze(Game *gp, Entity *ep);
+
+Vector2 Vector2RotateStepFixedRadius(Vector2 P, Vector2 C, float delta, float r);
 
 void         sprite_update(Game *gp, Sprite *sp);
 Sprite_frame sprite_current_frame(Sprite sp);

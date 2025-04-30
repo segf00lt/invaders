@@ -1,6 +1,5 @@
 #include <emscripten/emscripten.h>
 
-#define PLATFORM_WEB
 
 #include "invaders.h"
 
@@ -49,13 +48,15 @@ void wasm_main_loop(void *gp) {
 }
 
 int main(void) {
-  //SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+  SetConfigFlags(FLAG_WINDOW_RESIZABLE);
   InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "invaders");
   InitAudioDevice();
 
   SetTargetFPS(TARGET_FPS);
   SetTextLineSpacing(10);
   SetExitKey(0);
+
+  context_init();
 
   Game *gp = MemAlloc(sizeof(Game));
 

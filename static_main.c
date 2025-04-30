@@ -48,6 +48,8 @@ int main(void) {
   SetTextLineSpacing(10);
   SetExitKey(0);
 
+  context_init();
+
   Game *gp = MemAlloc(sizeof(Game));
 
   { /* init game */

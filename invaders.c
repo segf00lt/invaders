@@ -8,6 +8,7 @@
 
 /* globals */
 
+b8 number_of_enemies_in_formation_less_than_percent;
 b8 player_is_taking_damage = false;
 
 /* function bodies */
@@ -191,6 +192,8 @@ void entity_init_enemy_formation(Game *gp, Entity *ep) {
     0;
 
   ep->control = ENTITY_CONTROL_ENEMY_FORMATION_ENTER_LEVEL;
+
+  ep->formation_initial_enemy_count = ENEMY_FORMATION_COLS * ENEMY_FORMATION_ROWS;
 
   ep->half_size =
     (Vector2){
@@ -401,6 +404,48 @@ void entity_init_shields_pickup(Game *gp, Entity *ep) {
     Vector2Scale(SHIELDS_PICKUP_SIZE, 0.5);
 }
 
+void invader_go_kamikaze(Game *gp, Entity *ep) {
+  ep->formation_id = 0;
+  ep->control = ENTITY_CONTROL_INVADER_KAMIKAZE;
+
+  ep->flags &=
+    ~ENTITY_FLAG_DYNAMICS |
+    ~0;
+
+  ep->flags |=
+    ENTITY_FLAG_APPLY_COLLISION |
+    ENTITY_FLAG_APPLY_COLLISION_DAMAGE |
+    ENTITY_FLAG_DIE_ON_APPLY_COLLISION |
+    0;
+
+  ep->kamikaze_start_orbiting_delay = 0.5f;
+  ep->kamikaze_orbit_angular_vel = 140.0f;
+  ep->kamikaze_orbit_center = ep->pos;
+  ep->kamikaze_orbiting = 0;
+  ep->vel = (Vector2){0};
+  ep->collision_mask = INVADER_KAMIKAZE_COLLISION_MASK;
+  ep->damage_amount = INVADER_KAMIKAZE_DAMAGE;
+  ep->half_size = Vector2Scale(INVADER_BOUNDS_SIZE, 0.5f*1.2f);
+}
+
+Vector2 Vector2RotateStepFixedRadius(Vector2 P, Vector2 C, float delta, float r) {
+  Vector2 v = Vector2Subtract(P, C);
+
+  Vector2 v_rot =
+  {
+    v.x + delta * -v.y,
+    v.y + delta *  v.x,
+  };
+
+  float len = Vector2Length(v_rot);
+
+  if(len > 0.0f) {
+    v_rot = Vector2Scale(v_rot, 1/(len*r));
+  }
+
+  return Vector2Add(C, v_rot);
+}
+
 force_inline void sprite_update(Game *gp, Sprite *sp) {
   if(!(sp->flags & SPRITE_FLAG_STILL)) {
 
@@ -597,7 +642,7 @@ void game_update_and_draw(Game *gp) {
           gp->resume_hint_blink_high = 1;
           gp->resume_hint_blink_timer = 0;
 
-          //PauseSound(gp->invader_missile_sound);
+          PauseSound(gp->invader_missile_sound);
           PauseSound(gp->player_missile_sound);
           PauseSound(gp->invader_die_sound);
           PauseSound(gp->player_damage_sound);
@@ -614,7 +659,7 @@ void game_update_and_draw(Game *gp) {
 
         } else {
 
-          //ResumeSound(gp->invader_missile_sound);
+          ResumeSound(gp->invader_missile_sound);
           ResumeSound(gp->player_missile_sound);
           ResumeSound(gp->invader_die_sound);
           ResumeSound(gp->player_damage_sound);
@@ -636,7 +681,7 @@ void game_update_and_draw(Game *gp) {
       }
     }
 
-#ifndef PLATFORM_WEB
+#ifndef OS_WEB
     if(IsKeyPressed(KEY_F5)) {
       game_reset(gp);
     }
@@ -1160,15 +1205,44 @@ void game_update_and_draw(Game *gp) {
                   }
                 }
 
-                // TODO refactor how enemy formations work
-                if(enemies_count > 0) {
+                if(gp->state != GAME_STATE_GAME_OVER) {
 
-                  //if(ep->formation_trigger_enemy_shoot_delay > 0) {
-                  //  ep->formation_trigger_enemy_shoot_delay -= gp->timestep;
-                  //} else {
-                  //  ep->formation_trigger_enemy_shoot_delay = 0;
+                  // TODO invader kamikaze
+#if !1
+                  if(enemies_count <= (float)ep->formation_initial_enemy_count * 0.4) {
+                    number_of_enemies_in_formation_less_than_percent = 1;
 
-                  if(gp->state != GAME_STATE_GAME_OVER) {
+                    if(ep->formation_trigger_enemy_kamikaze_timer < 0) {
+                      ep->formation_trigger_enemy_kamikaze_timer = ENEMY_FORMATION_TRIGGER_KAMIKAZE_TIME;
+
+                      int index = GetRandomValue(0, enemies_count - 1);
+
+                      if(enemies_count > 0) {
+                        enemies_count--;
+
+                        Entity *enemy = enemies[index];
+                        enemies[index] = enemies[enemies_count];
+
+                        invader_go_kamikaze(gp, enemy);
+                      }
+
+                    } else {
+                      ep->formation_trigger_enemy_kamikaze_timer -= gp->timestep;
+                    }
+
+                  } else {
+                    number_of_enemies_in_formation_less_than_percent = 0;
+                  }
+#endif
+
+                  // TODO refactor how enemy formations work
+                  if(enemies_count > 0) {
+
+                    //if(ep->formation_trigger_enemy_shoot_delay > 0) {
+                    //  ep->formation_trigger_enemy_shoot_delay -= gp->timestep;
+                    //} else {
+                    //  ep->formation_trigger_enemy_shoot_delay = 0;
+
                     while(number_of_shooting_invaders < MAX_SHOOTING_INVADERS_PER_FORMATION && number_of_shooting_invaders < enemies_count) {
                       int index = GetRandomValue(0, enemies_count - 1);
 
@@ -1183,12 +1257,12 @@ void game_update_and_draw(Game *gp) {
                       }
 
                     }
-                  }
-                  //}
+                    //}
 
-                } else {
-                  entity_die(gp, ep);
-                  goto entity_update_end;
+                  } else {
+                    entity_die(gp, ep);
+                    goto entity_update_end;
+                  }
                 }
 
               } break;
@@ -1256,6 +1330,48 @@ void game_update_and_draw(Game *gp) {
                   ep->enemy_wait_after_shooting_time = 0;
                 } else {
                   ep->enemy_wait_after_shooting_time -= gp->timestep;
+                }
+
+              } break;
+            case ENTITY_CONTROL_INVADER_KAMIKAZE:
+              {
+                if(ep->health <= 0) {
+                  SetSoundPan(gp->invader_die_sound, Normalize(ep->pos.x, WINDOW_WIDTH, 0));
+                  PlaySound(gp->invader_die_sound);
+                  gp->score += 5;
+
+                  ep->particle_emitter.particle.pos = ep->pos;
+                  particle_emit(gp, ep->particle_emitter);
+
+                  entity_die(gp, ep);
+                  goto entity_update_end;
+                }
+
+                ep->vel =
+                  Vector2Scale(Vector2Normalize(Vector2Subtract(gp->player->pos, ep->pos)), INVADER_KAMIKAZE_SPEED);
+
+                if(ep->kamikaze_orbiting) {
+invader_control_kamikaze_orbit_dynamics:
+                  ep->kamikaze_orbit_center =
+                    Vector2Add(ep->kamikaze_orbit_center, Vector2Scale(ep->vel, gp->timestep));
+
+                  ep->pos =
+                    Vector2RotateStepFixedRadius(
+                        ep->pos,
+                        ep->kamikaze_orbit_center,
+                        ep->kamikaze_orbit_angular_vel*gp->timestep,
+                        ep->kamikaze_orbit_radius);
+
+                } else {
+                  if(ep->kamikaze_start_orbiting_delay < 0) {
+                    ep->kamikaze_orbiting = 1;
+
+                    ep->kamikaze_orbit_radius = Vector2Distance(ep->pos, ep->kamikaze_orbit_center);
+                    goto invader_control_kamikaze_orbit_dynamics;
+
+                  } else {
+                    ep->kamikaze_start_orbiting_delay -= gp->timestep;
+                  }
                 }
 
               } break;
@@ -1372,7 +1488,10 @@ void game_update_and_draw(Game *gp) {
                   Entity *missile = entity_spawn(gp);
                   ep->missile_launcher.initial_pos = ep->pos;
                   entity_init_missile_from_launcher(gp, missile, ep->missile_launcher);
+
                   SetSoundPan(missile->missile_sound, Normalize(ep->pos.x, WINDOW_WIDTH, 0));
+                  SetSoundPitch(missile->missile_sound, Remap(GetRandomValue(0,5), 0, 5, 0.95, 1.0));
+
                   PlaySound(missile->missile_sound);
                 }
               }
@@ -1400,7 +1519,7 @@ void game_update_and_draw(Game *gp) {
             }
           }
 
-entity_update_end:; // apparently just placing a label somewhere isn't legal
+entity_update_end:;
         } /* entity_update */
 
       } /* update entities */
@@ -1459,6 +1578,11 @@ update_end:;
     BeginTextureMode(gp->render_texture);
 
     ClearBackground(BLACK);
+
+    DrawTextureV(
+        gp->background_texture,
+        (Vector2){0, gp->background_y_offset + gp->background_texture.height},
+        (Color){255, 255, 255, 150});
 
     DrawTextureV(
         gp->background_texture,
@@ -1651,6 +1775,7 @@ update_end:;
     if(gp->debug_flags & GAME_DEBUG_FLAG_DEBUG_UI) { /* debug overlay */
       char *debug_text = game_frame_scratch_alloc(gp, 256);
       char *debug_text_fmt =
+        "number_of_enemies_in_formation_less_than_percent: %s\n"
         "auto_hot_reload: %s\n"
         "player_is_invincible: %s\n"
         "frame time: %.7f\n"
@@ -1665,6 +1790,7 @@ update_end:;
         "game state: %s";
       stbsp_sprintf(debug_text,
           debug_text_fmt,
+          number_of_enemies_in_formation_less_than_percent ? "true" : "false",
           (gp->debug_flags & GAME_DEBUG_FLAG_HOT_RELOAD) ? "on" : "off",
           (gp->debug_flags & GAME_DEBUG_FLAG_PLAYER_INVINCIBLE) ? "on" : "off",
           gp->timestep,

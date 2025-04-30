@@ -59,6 +59,8 @@ int main(void) {
   SetTraceLogLevel(LOG_DEBUG);
   SetExitKey(0);
 
+  context_init();
+
   Game *gp = MemAlloc(sizeof(Game));
 
   { /* init game */
@@ -90,7 +92,7 @@ int main(void) {
         unload_assets(gp);
         load_assets(gp);
 
-        WaitTime(0.2f);
+        WaitTime(0.17f);
         ASSERT(!dlclose(game_module));
         game_module = dlopen(INVADERS_MODULE_PATH, RTLD_NOW);
         game_update_and_draw_proc = (Game_update_and_draw_proc)dlsym(game_module, "game_update_and_draw");

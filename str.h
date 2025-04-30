@@ -4,6 +4,7 @@
 
 #include "basic.h"
 #include "arena.h"
+#include "context.h"
 
 
 typedef struct Str8 Str8;
@@ -47,10 +48,11 @@ void str8_list_append_string_(Arena *a, Str8_list *list, Str8 str);
 
 Str8_list push_str8_list_copy(Arena *a, Str8_list list);
 
-Str8 push_str8_copy(Arena *a, Str8 str);
-Str8 push_str8_copy_cstr(Arena *a, char *cstr);
-Str8 push_str8fv(Arena *a, char *fmt, va_list args);
-Str8 push_str8f(Arena *a, char *fmt, ...);
+Str8  push_str8_copy(Arena *a, Str8 str);
+Str8  push_str8_copy_cstr(Arena *a, char *cstr);
+Str8  push_str8fv(Arena *a, char *fmt, va_list args);
+Str8  push_str8f(Arena *a, char *fmt, ...);
+char* push_cstr_copy_str8(Arena *a, Str8 str);
 
 b32 str8_is_cident(Str8 str);
 b32 str8_is_alpha(Str8 str);
@@ -184,6 +186,12 @@ Str8 push_str8_copy(Arena *a, Str8 str) {
 force_inline Str8 push_str8_copy_cstr(Arena *a, char *cstr) {
   Str8 str = { .s = (u8*)cstr, .len = memory_strlen(cstr) };
   return push_str8_copy(a, str);
+}
+
+force_inline char* push_cstr_copy_str8(Arena *a, Str8 str) {
+  Str8 s_ = push_str8_copy(a, str);
+  char *s = (char*)s_.s;
+  return s;
 }
 
 Str8 push_str8fv(Arena *a, char *fmt, va_list args){

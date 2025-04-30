@@ -207,8 +207,8 @@
 # define ASSERT(x) ASSERT_ALWAYS(x)
 # define ASSERT_MESSAGE(x, msg, ...) ASSERT_ALWAYS_MESSAGE(x, msg, __VA_ARGS__)
 #endif
-#define UNREACHABLE   ASSERT_MESSAGE(0, "UNREACHABLE%c", '\n')
-#define UNIMPLEMENTED ASSERT_MESSAGE(0, "UNIMPLEMENTED%c", '\n')
+#define UNREACHABLE   ASSERT_MESSAGE(0, "UNREACHABLE LINE %i FILE %s\n", __LINE__, __FILE__)
+#define UNIMPLEMENTED   ASSERT_MESSAGE(0, "UNIMPLEMENTED LINE %i FILE %s\n", __LINE__, __FILE__)
 // TODO these messages assume a string literal, eventually we should have alternatives for runtime strings
 #define PANICF(msg, ...)    ASSERT_MESSAGE(0, "PANIC ON LINE %i OF FILE %s: "msg"\n", __LINE__, __FILE__, __VA_ARGS__)
 #define PANIC(msg)    PANICF(msg"%s", "")
@@ -291,6 +291,9 @@ check_nil(nil,p) ? \
 #define sll_stack_push(f,n) sll_stack_push_n(f,n,next)
 #define sll_stack_pop(f) sll_stack_pop_n(f,next)
 
+#define defer_loop(begin, end) for(int __i__ = ((begin), 0); !__i__; __i__ += 1, (end))
+#define defer_loop_check(begin, end) for(int __i__ = 2 * !(begin); (__i__ == 2 ? ((end), 0) : !__i__); __i__ += 1, (end))
+
 typedef int64_t  s64;
 typedef uint64_t u64;
 typedef int32_t  s32;
@@ -309,3 +312,4 @@ typedef uint64_t b64;
 
 
 #endif
+
