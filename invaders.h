@@ -28,7 +28,7 @@
 #define WINDOW_RECT ((Rectangle){0, 0, WINDOW_WIDTH, WINDOW_HEIGHT})
 
 #define MAX_ENTITIES 2048
-#define MAX_PARTICLES 128
+#define MAX_PARTICLES 256
 
 #define MAX_SHOOTING_INVADERS_PER_FORMATION 3
 
@@ -60,8 +60,7 @@
 #define PLAYER_SPRITE_SCALE ((float)3.0f)
 #define PLAYER_HEALTH_ICON_SPRITE_SCALE ((float)2.0f)
 
-#define PLAYER_COLLISION_MASK \
-  ((Entity_kind_mask)(ENTITY_KIND_MASK_HEALTH_PACK | ENTITY_KIND_MASK_SHIELDS_PICKUP))
+#define PLAYER_COLLISION_MASK ((Entity_kind_mask)(ENTITY_KIND_MASK_HEALTH_PACK | ENTITY_KIND_MASK_SHIELDS_PICKUP | ENTITY_KIND_MASK_DOUBLE_MISSILE_PICKUP))
 
 #define PLAYER_DAMAGE_BLINK_PERIOD ((float)0.03f)
 #define PLAYER_DAMAGE_BLINK_TOTAL_TIME ((float)1.2f)
@@ -121,7 +120,7 @@
 
 #define INVADER_KAMIKAZE_DAMAGE 2
 #define INVADER_KAMIKAZE_COLLISION_MASK ((Entity_kind_mask)(ENTITY_KIND_MASK_PLAYER))
-#define INVADER_KAMIKAZE_SPEED ((float)700.0f)
+#define INVADER_KAMIKAZE_SPEED ((float)600.0f)
 
 #define HEALTH_PACK_SIZE ((Vector2){ 50, 50 })
 #define HEALTH_PACK_INITIAL_Y ((float)-80.0f)
@@ -135,6 +134,12 @@
 
 #define SHIELDS_TIME ((float)7.0f)
 #define SHIELDS_COLOR_ANIMATE_FREQ ((float)40.0f)
+
+#define DOUBLE_MISSILE_PICKUP_SIZE ((Vector2){ 50, 50 })
+#define DOUBLE_MISSILE_PICKUP_INITIAL_Y ((float)-80.0f)
+#define DOUBLE_MISSILE_PICKUP_VELOCITY ((Vector2){ 0, 500 })
+#define DOUBLE_MISSILE_PICKUP_SPRITE_SCALE ((float)4.0f)
+#define DOUBLE_MISSILE_PICKUP_DURATION ((float)13.0f)
 
 #define ORANGE_EXPLOSION_SCALE ((float)3.0f)
 
@@ -181,14 +186,15 @@
 #define GAME_FLAGS      \
   X(PAUSE)              \
 
-#define ENTITY_KINDS    \
-  X(PLAYER)             \
-  X(INVADER)            \
-  X(FORMATION)          \
-  X(MISSILE)            \
-  X(BANNER)             \
-  X(HEALTH_PACK)        \
-  X(SHIELDS_PICKUP)     \
+#define ENTITY_KINDS           \
+  X(PLAYER)                    \
+  X(INVADER)                   \
+  X(FORMATION)                 \
+  X(MISSILE)                   \
+  X(BANNER)                    \
+  X(HEALTH_PACK)               \
+  X(SHIELDS_PICKUP)            \
+  X(DOUBLE_MISSILE_PICKUP)     \
 
 #define ENTITY_ORDERS   \
   X(FIRST)              \
@@ -201,18 +207,20 @@
   X(RECEIVE_COLLISION)               \
   X(DIE_ON_APPLY_COLLISION)          \
   X(CLAMP_POS_TO_SCREEN)             \
+  X(DIE_IF_ABOVE_SCREEN)             \
+  X(DIE_IF_BELOW_SCREEN)             \
   X(HAS_SHIELDS)                     \
   X(HAS_MISSILE_LAUNCHER)            \
   X(HAS_PARTICLE_EMITTER)            \
   X(HAS_SPRITE)                      \
+  X(DEATH_PARTICLES)                 \
+  X(DEATH_SOUND)                     \
   X(MOVING)                          \
   X(APPLY_COLLISION_DAMAGE)          \
   X(RECEIVE_COLLISION_DAMAGE)        \
   X(BLINK_TEXT)                      \
   X(DRAW_TEXT)                       \
   X(USE_DAMAGE_BLINK_TINT)           \
-  X(DRAW_BOUNDS)                     \
-  X(FILL_BOUNDS)                     \
 
 #define ENTITY_CONTROLS            \
   X(PLAYER)                        \
@@ -223,11 +231,15 @@
   X(MISSILE)                       \
   X(HEALTH_PACK)                   \
   X(SHIELDS_PICKUP)                \
+  X(DOUBLE_MISSILE_PICKUP)         \
 
 #define PARTICLE_FLAGS            \
   X(HAS_SPRITE)                   \
   X(DIE_WHEN_ANIM_FINISH)         \
   X(MULTIPLE_ANIM_CYCLES)         \
+
+#define MISSILE_LAUNCHER_FLAGS           \
+  X(DOUBLE_MISSILES)                     \
 
 
 /* type definitions */
@@ -238,6 +250,7 @@ typedef struct Entity Entity;
 typedef struct Missile_launcher Missile_launcher;
 typedef struct Particle_emitter Particle_emitter;
 typedef struct Particle Particle;
+typedef u64 Missile_launcher_flags;
 typedef u64 Particle_flags;
 typedef u64 Game_flags;
 typedef u64 Game_debug_flags;
@@ -343,6 +356,19 @@ PARTICLE_FLAGS
 
 STATIC_ASSERT(PARTICLE_FLAG_INDEX_MAX < 64, number_of_particle_flags_is_less_than_64);
 
+typedef enum Missile_launcher_flag_index {
+  MISSILE_LAUNCHER_FLAG_INDEX_INVALID = -1,
+#define X(flag) MISSILE_LAUNCHER_FLAG_INDEX_##flag,
+  MISSILE_LAUNCHER_FLAGS
+#undef X
+    MISSILE_LAUNCHER_FLAG_INDEX_MAX,
+} Missile_launcher_flag_index;
+
+#define X(flag) const Missile_launcher_flags MISSILE_LAUNCHER_FLAG_##flag = (Missile_launcher_flags)(1ull<<MISSILE_LAUNCHER_FLAG_INDEX_##flag);
+MISSILE_LAUNCHER_FLAGS
+#undef X
+
+STATIC_ASSERT(MISSILE_LAUNCHER_FLAG_INDEX_MAX < 64, number_of_missile_launcher_flags_is_less_than_64);
 
 /* struct bodies */
 
@@ -367,6 +393,8 @@ struct Particle_emitter {
 };
 
 struct Missile_launcher {
+  Missile_launcher_flags flags;
+
   Entity_flags missile_entity_flags;
 
   Vector2 initial_pos;
@@ -384,6 +412,8 @@ struct Missile_launcher {
 
   Entity_kind_mask collision_mask;
   int              damage_amount;
+
+  float double_missile_time;
 
   Particle_emitter particle_emitter;
 
@@ -430,10 +460,9 @@ struct Entity {
   b32   enemy_do_spit_animation;
 
   Vector2 kamikaze_orbit_center;
+  Vector2 kamikaze_orbit_arm;
   float   kamikaze_orbit_angular_vel;
-  float   kamikaze_start_orbiting_delay;
   float   kamikaze_orbit_radius;
-  b32     kamikaze_orbiting;
 
   int health;
   int received_damage;
@@ -445,6 +474,8 @@ struct Entity {
   Sprite sprite;
   Color     sprite_tint;
   float     sprite_scale;
+
+  Sound die_sound;
 
   float damage_blink_timer;
   float damage_blink_period;
@@ -539,6 +570,7 @@ struct Game {
 
   float time_since_last_health_spawned;
   float time_since_last_shields_spawned;
+  float time_since_last_double_missile_spawned;
 
   float wave_transition_pre_delay_timer;
   float wave_transition_post_delay_timer;
@@ -579,9 +611,12 @@ void entity_init_missile_from_launcher(Game *gp, Entity *ep, Missile_launcher la
 void entity_init_health_pack(Game *gp, Entity *ep);
 void entity_init_shields_pickup(Game *gp, Entity *ep);
 
+b32 entity_is_on_screen(Entity *ep);
+
 void invader_go_kamikaze(Game *gp, Entity *ep);
 
 Vector2 Vector2RotateStepFixedRadius(Vector2 P, Vector2 C, float delta, float r);
+Vector2 Vector2RotateStepFixedRadiusVec(Vector2 v, float delta, float r);
 
 void         sprite_update(Game *gp, Sprite *sp);
 Sprite_frame sprite_current_frame(Sprite sp);

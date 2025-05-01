@@ -404,6 +404,41 @@ void entity_init_shields_pickup(Game *gp, Entity *ep) {
     Vector2Scale(SHIELDS_PICKUP_SIZE, 0.5);
 }
 
+void entity_init_double_missile_pickup(Game *gp, Entity *ep) {
+  ep->kind = ENTITY_KIND_DOUBLE_MISSILE_PICKUP;
+
+  ep->flags =
+    ENTITY_FLAG_DYNAMICS |
+    ENTITY_FLAG_RECEIVE_COLLISION |
+    ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE |
+    ENTITY_FLAG_HAS_SPRITE |
+    //ENTITY_FLAG_FILL_BOUNDS |
+    //ENTITY_FLAG_DRAW_BOUNDS |
+    0;
+
+  ep->control = ENTITY_CONTROL_DOUBLE_MISSILE_PICKUP;
+
+  ep->update_order = ENTITY_ORDER_LAST;
+  ep->draw_order = ENTITY_ORDER_LAST;
+
+  ep->pos =
+    (Vector2) {
+      .x = (float)GetRandomValue(DOUBLE_MISSILE_PICKUP_SIZE.x, WINDOW_WIDTH - DOUBLE_MISSILE_PICKUP_SIZE.x),
+      .y = DOUBLE_MISSILE_PICKUP_INITIAL_Y,
+    };
+
+  ep->vel = DOUBLE_MISSILE_PICKUP_VELOCITY;
+
+  ep->bounds_color = RED;
+
+  ep->sprite = SPRITE_DOUBLE_MISSILE_PICKUP;
+  ep->sprite_tint = WHITE;
+  ep->sprite_scale = DOUBLE_MISSILE_PICKUP_SPRITE_SCALE;
+
+  ep->half_size =
+    Vector2Scale(DOUBLE_MISSILE_PICKUP_SIZE, 0.5);
+}
+
 void invader_go_kamikaze(Game *gp, Entity *ep) {
   ep->formation_id = 0;
   ep->control = ENTITY_CONTROL_INVADER_KAMIKAZE;
@@ -418,14 +453,16 @@ void invader_go_kamikaze(Game *gp, Entity *ep) {
     ENTITY_FLAG_DIE_ON_APPLY_COLLISION |
     0;
 
-  ep->kamikaze_start_orbiting_delay = 0.5f;
-  ep->kamikaze_orbit_angular_vel = 140.0f;
-  ep->kamikaze_orbit_center = ep->pos;
-  ep->kamikaze_orbiting = 0;
+  ep->kamikaze_orbit_angular_vel = 12.0f;
+  ep->kamikaze_orbit_radius = 120;
+  ep->kamikaze_orbit_center = (Vector2){ ep->pos.x, ep->pos.y + ep->kamikaze_orbit_radius };
+  ep->kamikaze_orbit_arm = (Vector2){ 0, -ep->kamikaze_orbit_radius };
+
   ep->vel = (Vector2){0};
   ep->collision_mask = INVADER_KAMIKAZE_COLLISION_MASK;
   ep->damage_amount = INVADER_KAMIKAZE_DAMAGE;
   ep->half_size = Vector2Scale(INVADER_BOUNDS_SIZE, 0.5f*1.2f);
+  ep->sprite = SPRITE_INVADER_IDLE;
 }
 
 Vector2 Vector2RotateStepFixedRadius(Vector2 P, Vector2 C, float delta, float r) {
@@ -440,10 +477,26 @@ Vector2 Vector2RotateStepFixedRadius(Vector2 P, Vector2 C, float delta, float r)
   float len = Vector2Length(v_rot);
 
   if(len > 0.0f) {
-    v_rot = Vector2Scale(v_rot, 1/(len*r));
+    v_rot = Vector2Scale(v_rot, (1 / len) * r);
   }
 
   return Vector2Add(C, v_rot);
+}
+
+Vector2 Vector2RotateStepFixedRadiusVec(Vector2 v, float delta, float r) {
+  Vector2 v_rot =
+  {
+    v.x + delta * -v.y,
+    v.y + delta *  v.x,
+  };
+
+  float len = Vector2Length(v_rot);
+
+  if(len > 0.0f) {
+    v_rot = Vector2Scale(v_rot, (1 / len) * r);
+  }
+
+  return v_rot;
 }
 
 force_inline void sprite_update(Game *gp, Sprite *sp) {
@@ -913,9 +966,7 @@ void game_update_and_draw(Game *gp) {
           if(!player_is_alive) {
             gp->wave_counter = 1;
             gp->next_state = GAME_STATE_GAME_OVER;
-          }
-
-          if(advance_to_next_wave) {
+          } else if(advance_to_next_wave) {
             gp->wave_counter++;
             gp->next_state = GAME_STATE_WAVE_TRANSITION;
           }
@@ -932,6 +983,16 @@ void game_update_and_draw(Game *gp) {
                 gp->time_since_last_health_spawned = 0;
               } else {
                 gp->time_since_last_health_spawned += gp->timestep;
+              }
+
+              if(gp->time_since_last_double_missile_spawned >= 10) {
+                {
+                  Entity *double_missile_pickup = entity_spawn(gp);
+                  entity_init_double_missile_pickup(gp, double_missile_pickup);
+                }
+                gp->time_since_last_double_missile_spawned = 0;
+              } else {
+                gp->time_since_last_double_missile_spawned += gp->timestep;
               }
 
               if(gp->time_since_last_shields_spawned >= 20) {
@@ -1171,6 +1232,27 @@ void game_update_and_draw(Game *gp) {
                 }
 
               } break;
+            case ENTITY_CONTROL_DOUBLE_MISSILE_PICKUP:
+              {
+                if(ep->received_damage > 0) {
+                  if(!(gp->player->missile_launcher.flags & MISSILE_LAUNCHER_FLAG_DOUBLE_MISSILES)) {
+                    gp->player->missile_launcher.flags |= MISSILE_LAUNCHER_FLAG_DOUBLE_MISSILES;
+                    gp->player->missile_launcher.double_missile_time = DOUBLE_MISSILE_PICKUP_DURATION;
+                  }
+
+                  SetSoundPan(gp->invader_die_sound, Normalize(ep->pos.x, WINDOW_WIDTH, 0));
+                  PlaySound(gp->invader_die_sound);
+
+                  entity_die(gp, ep);
+                  goto entity_update_end;
+                }
+
+                if(ep->pos.y > WINDOW_HEIGHT + ep->half_size.y) {
+                  entity_die(gp, ep);
+                  goto entity_update_end;
+                }
+
+              } break;
             case ENTITY_CONTROL_ENEMY_FORMATION_MAIN:
               {
 
@@ -1207,8 +1289,6 @@ void game_update_and_draw(Game *gp) {
 
                 if(gp->state != GAME_STATE_GAME_OVER) {
 
-                  // TODO invader kamikaze
-#if !1
                   if(enemies_count <= (float)ep->formation_initial_enemy_count * 0.4) {
                     number_of_enemies_in_formation_less_than_percent = 1;
 
@@ -1233,7 +1313,6 @@ void game_update_and_draw(Game *gp) {
                   } else {
                     number_of_enemies_in_formation_less_than_percent = 0;
                   }
-#endif
 
                   // TODO refactor how enemy formations work
                   if(enemies_count > 0) {
@@ -1350,29 +1429,19 @@ void game_update_and_draw(Game *gp) {
                 ep->vel =
                   Vector2Scale(Vector2Normalize(Vector2Subtract(gp->player->pos, ep->pos)), INVADER_KAMIKAZE_SPEED);
 
-                if(ep->kamikaze_orbiting) {
-invader_control_kamikaze_orbit_dynamics:
-                  ep->kamikaze_orbit_center =
-                    Vector2Add(ep->kamikaze_orbit_center, Vector2Scale(ep->vel, gp->timestep));
+                Vector2 vel_scale_t = Vector2Scale(ep->vel, gp->timestep);
 
-                  ep->pos =
-                    Vector2RotateStepFixedRadius(
-                        ep->pos,
-                        ep->kamikaze_orbit_center,
-                        ep->kamikaze_orbit_angular_vel*gp->timestep,
-                        ep->kamikaze_orbit_radius);
+                ep->kamikaze_orbit_center =
+                  Vector2Add(ep->kamikaze_orbit_center, vel_scale_t);
 
-                } else {
-                  if(ep->kamikaze_start_orbiting_delay < 0) {
-                    ep->kamikaze_orbiting = 1;
+                ep->kamikaze_orbit_arm =
+                  Vector2RotateStepFixedRadiusVec(
+                      ep->kamikaze_orbit_arm,
+                      ep->kamikaze_orbit_angular_vel*gp->timestep,
+                      ep->kamikaze_orbit_radius);
 
-                    ep->kamikaze_orbit_radius = Vector2Distance(ep->pos, ep->kamikaze_orbit_center);
-                    goto invader_control_kamikaze_orbit_dynamics;
-
-                  } else {
-                    ep->kamikaze_start_orbiting_delay -= gp->timestep;
-                  }
-                }
+                ep->pos =
+                  Vector2Add(ep->kamikaze_orbit_center, ep->kamikaze_orbit_arm);
 
               } break;
           }
@@ -1479,20 +1548,58 @@ invader_control_kamikaze_orbit_dynamics:
 
           if(ep->flags & ENTITY_FLAG_HAS_MISSILE_LAUNCHER) {
 
+            if(ep->missile_launcher.flags & MISSILE_LAUNCHER_FLAG_DOUBLE_MISSILES) {
+              ep->missile_launcher.double_missile_time -= gp->timestep;
+              if(ep->missile_launcher.double_missile_time < 0) {
+                ep->missile_launcher.double_missile_time = 0;
+                ep->missile_launcher.flags &= ~MISSILE_LAUNCHER_FLAG_DOUBLE_MISSILES;
+              }
+            }
+
             if(gp->state == GAME_STATE_MAIN_LOOP) {
 
+              // TODO refactor missile launcher
               if(ep->missile_launcher.cooldown_timer == 0.0f) {
                 if(ep->missile_launcher.shooting) {
-                  ep->missile_launcher.cooldown_timer = ep->missile_launcher.cooldown_period;
 
-                  Entity *missile = entity_spawn(gp);
-                  ep->missile_launcher.initial_pos = ep->pos;
-                  entity_init_missile_from_launcher(gp, missile, ep->missile_launcher);
+                  if(ep->missile_launcher.flags & MISSILE_LAUNCHER_FLAG_DOUBLE_MISSILES) {
+                    ep->missile_launcher.cooldown_timer = ep->missile_launcher.cooldown_period;
 
-                  SetSoundPan(missile->missile_sound, Normalize(ep->pos.x, WINDOW_WIDTH, 0));
-                  SetSoundPitch(missile->missile_sound, Remap(GetRandomValue(0,5), 0, 5, 0.95, 1.0));
+                    // TODO this is a hack
 
-                  PlaySound(missile->missile_sound);
+                    Entity *missile1 = entity_spawn(gp);
+                    ep->missile_launcher.initial_pos = ep->pos;
+                    entity_init_missile_from_launcher(gp, missile1, ep->missile_launcher);
+
+                    missile1->pos.x -= missile1->half_size.x + 10.0f;
+
+                    Entity *missile2 = entity_spawn(gp);
+                    ep->missile_launcher.initial_pos = ep->pos;
+                    entity_init_missile_from_launcher(gp, missile2, ep->missile_launcher);
+
+                    missile2->pos.x += missile1->half_size.x + 10.0f;
+
+                    SetSoundPan(missile1->missile_sound, Normalize(missile1->pos.x, WINDOW_WIDTH, 0));
+                    SetSoundPitch(missile1->missile_sound, Remap(GetRandomValue(0,5), 0, 5, 0.95, 1.0));
+                    PlaySound(missile1->missile_sound);
+
+                    SetSoundPan(missile2->missile_sound, Normalize(missile2->pos.x, WINDOW_WIDTH, 0));
+                    SetSoundPitch(missile2->missile_sound, Remap(GetRandomValue(0,5), 0, 5, 0.95, 1.0));
+                    PlaySound(missile2->missile_sound);
+
+                  } else {
+                    ep->missile_launcher.cooldown_timer = ep->missile_launcher.cooldown_period;
+
+                    Entity *missile = entity_spawn(gp);
+                    ep->missile_launcher.initial_pos = ep->pos;
+                    entity_init_missile_from_launcher(gp, missile, ep->missile_launcher);
+
+                    SetSoundPan(missile->missile_sound, Normalize(ep->pos.x, WINDOW_WIDTH, 0));
+                    SetSoundPitch(missile->missile_sound, Remap(GetRandomValue(0,5), 0, 5, 0.95, 1.0));
+
+                    PlaySound(missile->missile_sound);
+                  }
+
                 }
               }
 
@@ -1634,7 +1741,7 @@ update_end:;
             DrawTextEx(gp->font, ep->text, pos, ep->font_size, ep->font_spacing, ep->text_color);
           }
 
-          if(ep->flags & ENTITY_FLAG_DRAW_BOUNDS || gp->debug_flags & GAME_DEBUG_FLAG_DRAW_ALL_ENTITY_BOUNDS) {
+          if(gp->debug_flags & GAME_DEBUG_FLAG_DRAW_ALL_ENTITY_BOUNDS) {
             Rectangle rec =
             {
               ep->pos.x - ep->half_size.x,
@@ -1644,18 +1751,6 @@ update_end:;
             };
 
             DrawRectangleLinesEx(rec, 2.0, ep->bounds_color);
-          }
-
-          if(ep->flags & ENTITY_FLAG_FILL_BOUNDS) {
-            Rectangle rec =
-            {
-              ep->pos.x - ep->half_size.x,
-              ep->pos.y - ep->half_size.y,
-              2 * ep->half_size.x,
-              2 * ep->half_size.y,
-            };
-
-            DrawRectangleRec(rec, ep->fill_color);
           }
 
         } /* entity_draw */
@@ -1761,7 +1856,7 @@ update_end:;
       ClearBackground(DARKBLUE);
     }
 #endif
-    ClearBackground(DARKBLUE);
+    ClearBackground(BLACK);
 
     {
       Rectangle dest = { (float)offset_x, (float)offset_y, WINDOW_WIDTH * scale, WINDOW_HEIGHT * scale };
@@ -1775,7 +1870,7 @@ update_end:;
     if(gp->debug_flags & GAME_DEBUG_FLAG_DEBUG_UI) { /* debug overlay */
       char *debug_text = game_frame_scratch_alloc(gp, 256);
       char *debug_text_fmt =
-        "number_of_enemies_in_formation_less_than_percent: %s\n"
+        "invaders will go kamikaze: %s\n"
         "auto_hot_reload: %s\n"
         "player_is_invincible: %s\n"
         "frame time: %.7f\n"
